@@ -5,7 +5,7 @@ on:
       types: [labeled]
 jobs:
   add_comment:
-    if: github.repository == 'Klipper3d/klipper'
+    if: github.repository == 'haicZhou/klipper'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v6
