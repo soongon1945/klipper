@@ -264,6 +264,7 @@ class PrinterHoming:
         homing_state = Homing(self.printer)
         homing_state.set_axes(axes)
         kin = self.printer.lookup_object('toolhead').get_kinematics()
+        toolhead = self.printer.lookup_object('toolhead')
         try:
             kin.home(homing_state)
         except self.printer.command_error:
@@ -272,6 +273,8 @@ class PrinterHoming:
                     "Homing failed due to printer shutdown")
             self.printer.lookup_object('stepper_enable').motor_off()
             raise
+        kin._activate_carriage(0)
+        toolhead.extruder.name = 'extruder'
 
 def load_config(config):
     return PrinterHoming(config)
