@@ -413,8 +413,11 @@ class PrinterConfig:
             f = open(temp_name, 'w')
             f.write(data)
             f.close()
+            os.system("sync")
             os.rename(cfgname, backup_name)
+            os.system("sync")
             os.rename(temp_name, cfgname)
+            os.system("sync")
         except:
             msg = "Unable to write config file during SAVE_CONFIG"
             logging.exception(msg)
