@@ -156,6 +156,7 @@ class ExtruderStepper:
 class PrinterExtruder:
     def __init__(self, config, extruder_num):
         self.printer = config.get_printer()
+        self.gcode_move = self.printer.load_object(config, 'gcode_move')
         self.name = config.get_name()
         self.last_position = 0.
         # Setup hotend heater
@@ -305,6 +306,9 @@ class PrinterExtruder:
             gcmd.respond_info("Extruder %s already active" % (self.name,))
             return
         gcmd.respond_info("Activating extruder %s" % (self.name,))
+        for pos, axis in enumerate('XY'):
+            self.gcode_move.base_position[pos] = self.gcode_move.e1_offset_position[pos]
+            self.gcode_move.homing_position[pos] = self.gcode_move.e1_offset_position[pos]
         toolhead.flush_step_generation()
         toolhead.set_extruder(self, self.last_position)
         self.printer.send_event("extruder:activate_extruder")

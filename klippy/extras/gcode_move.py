@@ -27,6 +27,7 @@ class GCodeMove:
             'G1', 'G20', 'G21',
             'M82', 'M83', 'G90', 'G91', 'G92', 'M220', 'M221',
             'SET_GCODE_OFFSET', 'SAVE_GCODE_STATE', 'RESTORE_GCODE_STATE',
+            'SET_GCODE_EOFFSET',
         ]
         for cmd in handlers:
             func = getattr(self, 'cmd_' + cmd)
@@ -42,6 +43,7 @@ class GCodeMove:
         self.base_position = [0.0, 0.0, 0.0, 0.0]
         self.last_position = [0.0, 0.0, 0.0, 0.0]
         self.homing_position = [0.0, 0.0, 0.0, 0.0]
+        self.e1_offset_position = [0.0, 0.0, 0.0, 0.0]
         self.speed = 25.
         self.speed_factor = 1. / 60.
         self.extrude_factor = 1.
@@ -105,6 +107,7 @@ class GCodeMove:
             'homing_origin': self.Coord(*self.homing_position),
             'position': self.Coord(*self.last_position),
             'gcode_position': self.Coord(*move_position),
+            'offset_position': self.Coord(*self.e1_offset_position),
         }
     def reset_last_position(self):
         if self.is_printer_ready:
@@ -206,6 +209,19 @@ class GCodeMove:
             for pos, delta in enumerate(move_delta):
                 self.last_position[pos] += delta
             self.move_with_transform(self.last_position, speed)
+    cmd_SET_GCODE_EOFFSET_help = "Set a virtual E1 offset to g-code positions"
+    def cmd_SET_GCODE_EOFFSET(self, gcmd):
+        move_delta = [0., 0., 0., 0.]
+        for pos, axis in enumerate('XYZE'):
+            offset = gcmd.get_float(axis, None)
+            if offset is None:
+                offset = gcmd.get_float(axis + '_ADJUST', None)
+                if offset is None:
+                    continue
+                offset += self.homing_position[pos]
+            delta = offset - self.homing_position[pos]
+            move_delta[pos] = delta
+            self.e1_offset_position[pos] += delta
     cmd_SAVE_GCODE_STATE_help = "Save G-Code coordinate state"
     def cmd_SAVE_GCODE_STATE(self, gcmd):
         state_name = gcmd.get('NAME', 'default')
