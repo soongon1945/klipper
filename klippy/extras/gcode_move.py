@@ -191,6 +191,7 @@ class GCodeMove:
         self.extrude_factor = new_extrude_factor
     cmd_SET_GCODE_OFFSET_help = "Set a virtual offset to g-code positions"
     def cmd_SET_GCODE_OFFSET(self, gcmd):
+        toolhead = self.printer.lookup_object('toolhead')
         move_delta = [0., 0., 0., 0.]
         for pos, axis in enumerate('XYZE'):
             offset = gcmd.get_float(axis, None)
@@ -201,8 +202,11 @@ class GCodeMove:
                 offset += self.homing_position[pos]
             delta = offset - self.homing_position[pos]
             move_delta[pos] = delta
-            self.base_position[pos] += delta
-            self.homing_position[pos] = offset
+            if toolhead.extruder.name == 'extruder1' and pos == 2:
+                self.e1_offset_position[pos] += delta
+            else:
+                self.base_position[pos] += delta
+                self.homing_position[pos] = offset
         # Move the toolhead the given offset if requested
         if gcmd.get_int('MOVE', 0):
             speed = gcmd.get_float('MOVE_SPEED', self.speed, above=0.)
