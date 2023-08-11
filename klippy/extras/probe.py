@@ -303,7 +303,8 @@ class PrinterProbe:
             self.gcode.respond_info("Nothing to do: Z Offset is 0")
         else:
             new_calibrate = self.z_offset - offset
-            configfile.set(self.name, 'z_offset', "%.3f" % (new_calibrate,))
+            configfile.set('stepper_z', 'position_endstop',
+                "%.3f" % (new_calibrate,))
     cmd_E_OFFSET_APPLY_PROBE_help = "Adjust the probe's z_offset"
 
 # Endstop wrapper that enables probe specific features
