@@ -44,6 +44,7 @@ class GCodeMove:
         self.last_position = [0.0, 0.0, 0.0, 0.0]
         self.homing_position = [0.0, 0.0, 0.0, 0.0]
         self.e1_offset_position = [0.0, 0.0, 0.0, 0.0]
+        self.Adjusting_the_offset = False
         self.speed = 25.
         self.speed_factor = 1. / 60.
         self.extrude_factor = 1.
@@ -204,9 +205,12 @@ class GCodeMove:
             move_delta[pos] = delta
             if toolhead.extruder.name == 'extruder1' and pos == 2:
                 self.e1_offset_position[pos] += delta
+                self.Adjusting_the_offset = True
             else:
                 self.base_position[pos] += delta
                 self.homing_position[pos] = offset
+                if toolhead.extruder.name == 'extruder' and pos == 2:
+                    self.e1_offset_position[3] = self.base_position[2]
         # Move the toolhead the given offset if requested
         if gcmd.get_int('MOVE', 0):
             speed = gcmd.get_float('MOVE_SPEED', self.speed, above=0.)

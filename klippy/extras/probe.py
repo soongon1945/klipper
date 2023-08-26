@@ -17,6 +17,7 @@ class PrinterProbe:
     def __init__(self, config, mcu_probe):
         self.printer = config.get_printer()
         self.gcode_move = self.printer.load_object(config, 'gcode_move')
+        self.manual_probe = self.printer.load_object(config, 'manual_probe')
         self.name = config.get_name()
         self.mcu_probe = mcu_probe
         self.speed = config.getfloat('speed', 5.0, above=0.)
@@ -297,14 +298,14 @@ class PrinterProbe:
         configfile = self.printer.lookup_object('configfile')
         configfile.set(self.name, 'e_x_offset', "%.3f" % (self.gcode_move.e1_offset_position[0],))
         configfile.set(self.name, 'e_y_offset', "%.3f" % (self.gcode_move.e1_offset_position[1],))
-        configfile.set(self.name, 'e_z_offset', "%.3f" % (self.gcode_move.e1_offset_position[2],))
-        offset = self.gcode_move.get_status()['homing_origin'].z
+        configfile.set(self.name, 'e_z_offset', "%.3f" % ((self.gcode_move.e1_offset_position[2]+self.gcode_move.e1_offset_position[3]),))
+        offset = self.gcode_move.e1_offset_position[3]
         if offset == 0:
             self.gcode.respond_info("Nothing to do: Z Offset is 0")
         else:
-            new_calibrate = self.z_offset - offset
+            new_calibrate = self.manual_probe.z_position_endstop - offset
             configfile.set('stepper_z', 'position_endstop',
-                "%.3f" % (new_calibrate,))
+                            "%.3f" % (new_calibrate,))
     cmd_E_OFFSET_APPLY_PROBE_help = "Adjust the probe's z_offset"
 
 # Endstop wrapper that enables probe specific features
