@@ -302,7 +302,7 @@ class PrinterExtruder:
     cmd_ACTIVATE_EXTRUDER_help = "Change the active extruder"
     def cmd_ACTIVATE_EXTRUDER(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')
-        if self.gcode_move.Adjusting_the_offset == True and pos == 2:
+        if self.gcode_move.Adjusting_the_offset == True:
             if self.name == 'extruder':
                 self.gcode_move.base_position[2] = self.gcode_move.e1_offset_position[3]
                 self.gcode_move.homing_position[2] = self.gcode_move.e1_offset_position[3]
