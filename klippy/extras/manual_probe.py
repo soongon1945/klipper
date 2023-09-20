@@ -88,7 +88,6 @@ class ManualProbe:
                 "with the above and restart the printer." % (new_calibrate))
             configfile.set('stepper_z', 'position_endstop',
                 "%.3f" % (new_calibrate,))
-        self.gcode_move.Adjusting_the_offset = False
     def cmd_Z_OFFSET_APPLY_DELTA_ENDSTOPS(self,gcmd):
         offset = self.gcode_move.get_status()['homing_origin'].z
         configfile = self.printer.lookup_object('configfile')
