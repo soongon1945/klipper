@@ -27,7 +27,7 @@ class GCodeMove:
             'G1', 'G20', 'G21',
             'M82', 'M83', 'G90', 'G91', 'G92', 'M220', 'M221',
             'SET_GCODE_OFFSET', 'SAVE_GCODE_STATE', 'RESTORE_GCODE_STATE',
-            'SET_GCODE_EOFFSET',
+            'SET_GCODE_EOFFSET', 'RECORD_GCODE_STATE',
         ]
         for cmd in handlers:
             func = getattr(self, 'cmd_' + cmd)
@@ -44,6 +44,8 @@ class GCodeMove:
         self.last_position = [0.0, 0.0, 0.0, 0.0]
         self.homing_position = [0.0, 0.0, 0.0, 0.0]
         self.e1_offset_position = [0.0, 0.0, 0.0, 0.0]
+        self.record_position = [0.0, 0.0, 0.0, 0.0]
+        self.record_state = 1
         self.speed = 25.
         self.speed_factor = 1. / 60.
         self.extrude_factor = 1.
@@ -256,6 +258,17 @@ class GCodeMove:
             speed = gcmd.get_float('MOVE_SPEED', self.speed, above=0.)
             self.last_position[:3] = state['last_position'][:3]
             self.move_with_transform(self.last_position, speed)
+    cmd_RECORD_GCODE_STATE_help = "Restore a previously saved G-Code state"
+    def cmd_RECORD_GCODE_STATE(self, gcmd):
+        gcode = self.printer.lookup_object('gcode')
+        if gcmd.get_int('MOVE', 0):
+            gcode.run_script_from_command("G1 F1000 Z%.4f" % (self.record_position[2]))
+        else:
+            record_state = gcmd.get_int('MOVE', 1)
+            if self.record_state == record_state:
+                return
+            self.record_state = record_state
+            self.record_position[2] = self.last_position[2]
     cmd_GET_POSITION_help = (
         "Return information on the current location of the toolhead")
     def cmd_GET_POSITION(self, gcmd):
