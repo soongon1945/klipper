@@ -304,12 +304,12 @@ class PrinterExtruder:
         toolhead = self.printer.lookup_object('toolhead')
         if self.name == 'extruder':
             for pos, axis in enumerate('XYZ'):
-                self.gcode_move.base_position[pos] = 0
-                self.gcode_move.homing_position[pos] = 0
+                self.gcode_move.base_position[pos] = 0 + self.gcode_move.e1_offset_position[3]
+                self.gcode_move.homing_position[pos] = 0 + self.gcode_move.e1_offset_position[3]
         elif self.name == 'extruder1':
             for pos, axis in enumerate('XYZ'):
-                self.gcode_move.base_position[pos] = self.gcode_move.e1_offset_position[pos]
-                self.gcode_move.homing_position[pos] = self.gcode_move.e1_offset_position[pos]
+                self.gcode_move.base_position[pos] = self.gcode_move.e1_offset_position[pos] + self.gcode_move.e1_offset_position[3]
+                self.gcode_move.homing_position[pos] = self.gcode_move.e1_offset_position[pos] + self.gcode_move.e1_offset_position[3]
         if toolhead.get_extruder() is self:
             gcmd.respond_info("Extruder %s already active" % (self.name,))
             return
