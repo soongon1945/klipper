@@ -262,13 +262,13 @@ class GCodeMove:
     cmd_RECORD_GCODE_STATE_help = "Restore a previously saved G-Code state"
     def cmd_RECORD_GCODE_STATE(self, gcmd):
         gcode = self.printer.lookup_object('gcode')
-        if gcmd.get_int('MOVE', 0):
+        record_state = gcmd.get_int('MOVE', 0)
+        if record_state:
+            self.record_state = record_state
             gcode.run_script_from_command("G1 F1000 Z%.4f" % (self.record_position[2]))
         else:
-            record_state = gcmd.get_int('MOVE', 1)
             if self.record_state == record_state:
                 return
-            self.record_state = record_state
             self.record_position[2] = self.last_position[2]
     cmd_GET_POSITION_help = (
         "Return information on the current location of the toolhead")
