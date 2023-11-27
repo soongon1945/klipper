@@ -11,6 +11,7 @@ class SaveVariables:
         self.printer = config.get_printer()
         self.filename = os.path.expanduser(config.get('filename'))
         self.allVariables = {}
+        self.was_interrupted = False
         try:
             if not os.path.exists(self.filename):
                 open(self.filename, "w").close()
@@ -33,6 +34,11 @@ class SaveVariables:
             logging.exception(msg)
             raise self.printer.command_error(msg)
         self.allVariables = allvars
+        if 'was_interrupted' in allvars and 'byte' in allvars:
+            if self.allVariables['was_interrupted'] == True:
+                self.was_interrupted = True
+        else:
+            self.was_interrupted = False
     cmd_SAVE_VARIABLE_help = "Save arbitrary variables to disk"
     def cmd_SAVE_VARIABLE(self, gcmd):
         varname = gcmd.get('VARIABLE')
@@ -52,6 +58,7 @@ class SaveVariables:
             f = open(self.filename, "w")
             varfile.write(f)
             f.close()
+            os.system("sync")
         except:
             msg = "Unable to save variable"
             logging.exception(msg)

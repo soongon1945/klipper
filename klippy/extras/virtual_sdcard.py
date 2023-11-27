@@ -24,8 +24,11 @@ class VirtualSD:
         self.must_pause_work = self.cmd_from_sd = False
         self.next_file_position = 0
         self.work_timer = None
+        self.allow_interrupt = False
         # Error handling
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
+        self.gcode = self.printer.lookup_object('gcode')
+        self.save_variables = self.printer.lookup_object('save_variables')
         self.on_error_gcode = gcode_macro.load_template(
             config, 'on_error_gcode', '')
         # Register commands
@@ -40,6 +43,9 @@ class VirtualSD:
         self.gcode.register_command(
             "SDCARD_PRINT_FILE", self.cmd_SDCARD_PRINT_FILE,
             desc=self.cmd_SDCARD_PRINT_FILE_help)
+        self.gcode.register_command(
+            "ALLOW_INTERRUPT", self.cmd_ALLOW_INTERRUPT,
+            desc=self.cmd_ALLOW_INTERRUPT_help)
     def handle_shutdown(self):
         if self.work_timer is not None:
             self.must_pause_work = True
@@ -120,6 +126,7 @@ class VirtualSD:
             self.current_file = None
             self.print_stats.note_cancel()
         self.file_position = self.file_size = 0
+        # self.gcode.run_script_from_command("CLEAR_LOCATION")
     # G-Code commands
     def cmd_error(self, gcmd):
         raise gcmd.error("SD write not supported")
@@ -131,6 +138,9 @@ class VirtualSD:
         self.file_position = self.file_size = 0
         self.print_stats.reset()
         self.printer.send_event("virtual_sdcard:reset_file")
+    cmd_ALLOW_INTERRUPT_help = "allow interrupt "
+    def cmd_ALLOW_INTERRUPT(self, gcmd):
+        self.allow_interrupt = True
     cmd_SDCARD_RESET_FILE_help = "Clears a loaded SD File. Stops the print "\
         "if necessary"
     def cmd_SDCARD_RESET_FILE(self, gcmd):
@@ -190,6 +200,7 @@ class VirtualSD:
         self.file_position = 0
         self.file_size = fsize
         self.print_stats.set_current_file(filename)
+        self.gcode.run_script_from_command("SAVE_LOCATION")
     def cmd_M24(self, gcmd):
         # Start/resume SD print
         self.do_resume()
@@ -219,6 +230,9 @@ class VirtualSD:
     def work_handler(self, eventtime):
         logging.info("Starting SD card print (position %d)", self.file_position)
         self.reactor.unregister_timer(self.work_timer)
+        if self.save_variables.was_interrupted and self.allow_interrupt:
+            self.file_position = self.save_variables.allVariables['byte']
+            self.save_variables.was_interrupted = False
         try:
             self.current_file.seek(self.file_position)
         except:
