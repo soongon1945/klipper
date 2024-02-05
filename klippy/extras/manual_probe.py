@@ -11,6 +11,7 @@ class ManualProbe:
         # Register commands
         self.gcode = self.printer.lookup_object('gcode')
         self.gcode_move = self.printer.load_object(config, "gcode_move")
+        self.bed_mesh_bak = self.printer.load_object(config, "bed_mesh")
         self.gcode.register_command('MANUAL_PROBE', self.cmd_MANUAL_PROBE,
                                     desc=self.cmd_MANUAL_PROBE_help)
         # Endstop value for cartesian printers with separate Z axis
@@ -65,7 +66,9 @@ class ManualProbe:
     def z_endstop_finalize(self, kin_pos):
         if kin_pos is None:
             return
-        z_pos = self.z_position_endstop - kin_pos[2]
+        # z_pos = self.z_position_endstop - kin_pos[2]
+        z_prode = self.bed_mesh_bak.get_probe_zvals()
+        z_pos = self.z_position_endstop + z_prode - kin_pos[2]
         self.gcode.respond_info(
             "stepper_z: position_endstop: %.3f\n"
             "The SAVE_CONFIG command will update the printer config file\n"
