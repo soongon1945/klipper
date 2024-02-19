@@ -248,7 +248,7 @@ class PrinterProbe:
     def probe_calibrate_finalize(self, kin_pos):
         if kin_pos is None:
             return
-        z_offset = self.probe_calibrate_z - kin_pos[2]
+        z_offset = self.probe_calibrate_z
         self.gcode.respond_info(
             "%s: z_offset: %.3f\n"
             "The SAVE_CONFIG command will update the printer config file\n"
