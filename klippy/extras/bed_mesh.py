@@ -1181,6 +1181,7 @@ class ProfileManager:
         self.profiles = {}
         self.current_profile = ""
         self.incompatible_profiles = []
+        self.get_zvals = 0
         # Fetch stored profiles from Config
         stored_profs = config.get_prefix_sections(self.name)
         stored_profs = [s for s in stored_profs
