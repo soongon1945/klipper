@@ -1199,7 +1199,7 @@ class ProfileManager:
             self.profiles[name] = {}
             zvals = profile.getlists('points', seps=(',', '\n'), parser=float)
             self.profiles[name]['points'] = zvals
-            self.get_zvals = self.profiles[name]['points'][0][1]
+            self.get_zvals = self.profiles[name]['points'][0][0]
             self.profiles[name]['mesh_params'] = params = \
                 collections.OrderedDict()
             for key, t in PROFILE_OPTIONS.items():
