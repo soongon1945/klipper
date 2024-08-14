@@ -177,6 +177,18 @@ class GCodeDispatch:
             # Ignore comments and leading/trailing spaces
             line = origline = line.strip()
             cpos = line.find(';')
+            if cpos == 0 and 'max_z_height:' in line:
+                pattern = f"{re.escape('max_z_height: ')}(-?\d+(\.\d+)?)"
+                use_match = re.search(pattern, line)
+                if use_match:
+                    zmax_value = float(use_match.group(1))
+                    kin = self.printer.lookup_object('toolhead').get_kinematics()
+                    toolhead = self.printer.lookup_object('toolhead')
+                    axes_max = kin.axes_max[2]
+                    if zmax_value > axes_max:
+                        toolhead.set_zmax_error(True, zmax_value, axes_max)
+                else:
+                    zmax_value = 0
             if cpos >= 0:
                 line = line[:cpos]
             # Break line into parts and determine command

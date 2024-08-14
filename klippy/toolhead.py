@@ -248,6 +248,9 @@ class ToolHead:
         self.trapq_finalize_moves = ffi_lib.trapq_finalize_moves
         self.step_generators = []
         # Create kinematics class
+        self.zmax_error = False
+        self.zmax_pos = 0.0
+        self.zmax_limit = 0.0
         gcode = self.printer.lookup_object('gcode')
         self.Coord = gcode.Coord
         self.extruder = kinematics.extruder.DummyExtruder(self.printer)
@@ -420,12 +423,26 @@ class ToolHead:
             return
         if move.is_kinematic_move:
             self.kin.check_move(move)
+            self.check_zmax()
         if move.axes_d[3]:
             self.extruder.check_move(move)
         self.commanded_pos[:] = move.end_pos
         self.move_queue.add_move(move)
         if self.print_time > self.need_check_stall:
             self._check_stall()
+
+    def set_zmax_error(self, mark, curpos, endpos):
+        self.zmax_error = mark
+        self.zmax_pos = curpos
+        self.zmax_limit = endpos
+
+    def check_zmax(self):
+        if self.zmax_error :
+            self.zmax_error = False
+            msg = "Move out of range"
+            m = "%s: %.3f [%.3f]" % (msg, self.zmax_pos, self.zmax_limit)
+            raise self.printer.command_error(m)
+
     def manual_move(self, coord, speed):
         curpos = list(self.commanded_pos)
         for i in range(len(coord)):
