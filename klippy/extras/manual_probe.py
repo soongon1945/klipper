@@ -33,6 +33,10 @@ class ManualProbe:
                                                           note_valid=False)
         # Conditionally register appropriate commands depending on printer
         # Cartestian printers with separate Z Axis
+        self.gcode.register_command(
+                'SET_NOZZLE_SIZE',
+                self.cmd_SET_NOZZLE_SIZE,
+                desc=self.cmd_SET_NOZZLE_SIZE_help)
         if self.z_position_endstop is not None:
             self.gcode.register_command(
                 'Z_ENDSTOP_CALIBRATE', self.cmd_Z_ENDSTOP_CALIBRATE,
@@ -78,6 +82,16 @@ class ManualProbe:
     cmd_Z_ENDSTOP_CALIBRATE_help = "Calibrate a Z endstop"
     def cmd_Z_ENDSTOP_CALIBRATE(self, gcmd):
         ManualProbeHelper(self.printer, gcmd, self.z_endstop_finalize)
+    cmd_SET_NOZZLE_SIZE_help = "Set_Nozzle_Size"
+    def cmd_SET_NOZZLE_SIZE(self, gcmd):
+        configfile = self.printer.lookup_object('configfile')
+        nozzle_size = gcmd.get_float('S', 0.4)
+        self.gcode.respond_info(
+                "extruder: nozzle_diameter: %.3f\n"
+                "The SAVE_CONFIG command will update the printer config file\n"
+                "with the above and restart the printer." % (nozzle_size))
+        configfile.set('extruder', 'nozzle_diameter',
+                "%.3f" % (nozzle_size,))
     def cmd_Z_OFFSET_APPLY_ENDSTOP(self,gcmd):
         offset = self.gcode_move.e1_offset_position[3]
         configfile = self.printer.lookup_object('configfile')
