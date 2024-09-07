@@ -25,11 +25,6 @@ class PrinterProbe:
         self.x_offset = config.getfloat('x_offset', 0.)
         self.y_offset = config.getfloat('y_offset', 0.)
         self.z_offset = config.getfloat('z_offset')
-        zconfig = config.getsection('stepper_z')
-        self.position_endstop_zp = zconfig.getfloat('position_endstop', None,
-                                                   note_valid=False)
-        self.z_probe_endstop = config.getfloat('z_probe_endstop', 0.)
-        self.probe_calculate = 0.
         self.probe_calibrate_z = 0.
         self.multi_probe_pending = False
         self.last_state = False
@@ -121,11 +116,7 @@ class PrinterProbe:
             return gcmd.get_float("LIFT_SPEED", self.lift_speed, above=0.)
         return self.lift_speed
     def get_offsets(self):
-        if self.position_endstop_zp != self.z_probe_endstop:
-            self.probe_calculate = self.z_offset - (self.z_probe_endstop - self.position_endstop_zp)
-            return self.x_offset, self.y_offset, self.probe_calculate
-        else:
-            return self.x_offset, self.y_offset, self.z_offset
+        return self.x_offset, self.y_offset, self.z_offset
     def get_position_endstop_zp(self):
         return self.position_endstop_zp
     def get_z_probe_endstop(self):
@@ -268,7 +259,6 @@ class PrinterProbe:
             "with the above and restart the printer." % (self.name, z_offset))
         configfile = self.printer.lookup_object('configfile')
         configfile.set(self.name, 'z_offset', "%.3f" % (z_offset,))
-        configfile.set(self.name, 'z_probe_endstop', "%.3f" % (self.position_endstop_zp,))
     cmd_PROBE_CALIBRATE_help = "Calibrate the probe's z_offset"
     def cmd_PROBE_CALIBRATE(self, gcmd):
         manual_probe.verify_no_manual_probe(self.printer)

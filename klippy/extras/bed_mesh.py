@@ -661,6 +661,7 @@ class BedMeshCalibrate:
         self.probe_helper.start_probe(gcmd)
     def probe_finalize(self, offsets, positions):
         x_offset, y_offset, z_offset = offsets
+        z_offset = positions[0][2]
         positions = [[round(p[0], 2), round(p[1], 2), p[2]]
                      for p in positions]
         if self.zero_reference_mode == ZrefMode.PROBE :
