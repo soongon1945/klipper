@@ -29,12 +29,14 @@ class PrinterProbe:
         self.multi_probe_pending = False
         self.last_state = False
         self.last_z_result = 0.
+        self.endstop_config = ''
         self.gcode_move = self.printer.load_object(config, "gcode_move")
         # Infer Z position to move to during a probe
         if config.has_section('stepper_z'):
             zconfig = config.getsection('stepper_z')
             self.z_position = zconfig.getfloat('position_min', 0.,
                                                note_valid=False)
+            self.endstop_config = zconfig.get('endstop_pin')
         else:
             pconfig = config.getsection('printer')
             self.z_position = pconfig.getfloat('minimum_z_position', 0.,
@@ -117,6 +119,8 @@ class PrinterProbe:
         return self.lift_speed
     def get_offsets(self):
         return self.x_offset, self.y_offset, self.z_offset
+    def get_endstop_config(self):
+        return 'z_virtual_endstop' not in self.endstop_config
     def get_position_endstop_zp(self):
         return self.position_endstop_zp
     def get_z_probe_endstop(self):
