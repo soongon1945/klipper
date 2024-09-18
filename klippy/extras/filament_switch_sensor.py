@@ -42,18 +42,6 @@ class RunoutHelper:
     def _handle_ready(self):
         self.min_event_systime = self.reactor.monotonic() + 2.
     def _runout_event_handler(self, eventtime):
-        self.printer.get_reactor().pause(eventtime + 1)
-        if self.filament_present:
-            self.min_event_systime = self.reactor.monotonic() + self.event_delay
-            return
-        self.printer.get_reactor().pause(eventtime + 1)
-        if self.filament_present:
-            self.min_event_systime = self.reactor.monotonic() + self.event_delay
-            return
-        self.printer.get_reactor().pause(eventtime + 1)
-        if self.filament_present:
-            self.min_event_systime = self.reactor.monotonic() + self.event_delay
-            return
         # Pausing from inside an event requires that the pause portion
         # of pause_resume execute immediately.
         pause_prefix = ""
