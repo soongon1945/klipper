@@ -86,7 +86,9 @@ class DualCarriages:
             range_min = max(range_min,
                             axes_pos[0] - axes_pos[1] + dc1_rail.position_min)
             range_max = min(range_max,
-                            axes_pos[0] - axes_pos[1]*2 + dc1_rail.position_max)
+                            axes_pos[0] - axes_pos[1] + dc1_rail.position_max)
+            range_min = dc0_rail.position_min
+            range_max = dc0_rail.position_max * 0.5
         elif mode == MIRROR:
             if dc0_rail.get_homing_info().positive_dir:
                 range_min = max(range_min,
@@ -98,6 +100,8 @@ class DualCarriages:
                                 0.5 * (sum(axes_pos) - safe_dist))
                 range_min = max(range_min,
                                 sum(axes_pos) - dc1_rail.position_max)
+            range_min = dc0_rail.position_min
+            range_max = dc0_rail.position_max * 0.5
         else:
             # mode == PRIMARY
             active_idx = 1 if self.dc[1].is_active() else 0
