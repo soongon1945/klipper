@@ -14,12 +14,13 @@ can travel further (the Z minimum position can be negative).
 """
 
 class PrinterProbe:
-    def __init__(self, config, mcu_probe):
+    def __init__(self, config, mcu_probe, zmax_mcu_probe):
         self.printer = config.get_printer()
         self.gcode_move = self.printer.load_object(config, 'gcode_move')
         self.manual_probe = self.printer.load_object(config, 'manual_probe')
         self.name = config.get_name()
         self.mcu_probe = mcu_probe
+        self.zmax_mcu_probe = zmax_mcu_probe
         self.speed = config.getfloat('speed', 5.0, above=0.)
         self.lift_speed = config.getfloat('lift_speed', self.speed, above=0.)
         self.x_offset = config.getfloat('x_offset', 0.)
@@ -35,6 +36,8 @@ class PrinterProbe:
         if config.has_section('stepper_z'):
             zconfig = config.getsection('stepper_z')
             self.z_position = zconfig.getfloat('position_min', 0.,
+                                               note_valid=False)
+            self.zmax_position = zconfig.getfloat('position_max', 0.,
                                                note_valid=False)
             self.endstop_config = zconfig.get('endstop_pin')
         else:
@@ -73,6 +76,8 @@ class PrinterProbe:
                                     desc=self.cmd_QUERY_PROBE_help)
         self.gcode.register_command('PROBE_CALIBRATE', self.cmd_PROBE_CALIBRATE,
                                     desc=self.cmd_PROBE_CALIBRATE_help)
+        self.gcode.register_command('ZMAX_PROBE_CALIBRATE', self.cmd_ZMAX_PROBE_CALIBRATE,
+                                    desc=self.cmd_ZMAX_PROBE_CALIBRATE_help)
         self.gcode.register_command('PROBE_ACCURACY', self.cmd_PROBE_ACCURACY,
                                     desc=self.cmd_PROBE_ACCURACY_help)
         self.gcode.register_command('Z_OFFSET_APPLY_PROBE',
@@ -135,6 +140,24 @@ class PrinterProbe:
         pos[2] = self.z_position
         try:
             epos = phoming.probing_move(self.mcu_probe, pos, speed)
+        except self.printer.command_error as e:
+            reason = str(e)
+            if "Timeout during endstop homing" in reason:
+                reason += HINT_TIMEOUT
+            raise self.printer.command_error(reason)
+        self.gcode.respond_info("probe at %.3f,%.3f is z=%.6f"
+                                % (epos[0], epos[1], epos[2]))
+        return epos[:3]
+    def _zmax_probe(self, speed):
+        toolhead = self.printer.lookup_object('toolhead')
+        curtime = self.printer.get_reactor().monotonic()
+        if 'z' not in toolhead.get_status(curtime)['homed_axes']:
+            raise self.printer.command_error("Must home before probe")
+        phoming = self.printer.lookup_object('homing')
+        pos = toolhead.get_position()
+        pos[2] = self.zmax_position
+        try:
+            epos = phoming.probing_move(self.zmax_mcu_probe, pos, speed)
         except self.printer.command_error as e:
             reason = str(e)
             if "Timeout during endstop homing" in reason:
@@ -280,6 +303,31 @@ class PrinterProbe:
         # Start manual probe
         manual_probe.ManualProbeHelper(self.printer, gcmd,
                                        self.probe_calibrate_finalize)
+    def probe_zmax_finalize(self, kin_pos):
+        toolhead = self.printer.lookup_object('toolhead')
+        z_max_position = toolhead.get_position()
+        self.gcode.respond_info(
+            "%s: z_max_position: %.3f\n"
+            "The SAVE_CONFIG command will update the printer config file\n"
+            "with the above and restart the printer." % (self.name, z_max_position[2]))
+        configfile = self.printer.lookup_object('configfile')
+        configfile.set(self.name, 'z_max_position', "%.3f" % (z_max_position[2],))
+    cmd_ZMAX_PROBE_CALIBRATE_help = "Calibrate the probe's z_max"
+    def cmd_ZMAX_PROBE_CALIBRATE(self, gcmd):
+        cmd = gcmd.get('SAVE', None)
+        speed = gcmd.get_float("PROBE_SPEED", self.speed, above=0.)
+        lift_speed = self.get_lift_speed(gcmd)
+        sample_retract_dist = gcmd.get_float("SAMPLE_RETRACT_DIST",
+                                             self.sample_retract_dist, above=0.)
+        positions = []
+        pos = self._zmax_probe(speed)
+        positions.append(pos)
+        # self._move([pos[2] - sample_retract_dist], lift_speed)
+        # pos = self._zmax_probe(speed)
+        # positions.append(pos)
+        if cmd:
+            manual_probe.ManualProbeHelper(self.printer, gcmd,
+                                           self.probe_zmax_finalize)
     def cmd_Z_OFFSET_APPLY_PROBE(self,gcmd):
         offset = self.gcode_move.get_status()['homing_origin'].z
         configfile = self.printer.lookup_object('configfile')
@@ -311,7 +359,7 @@ class PrinterProbe:
 
 # Endstop wrapper that enables probe specific features
 class ProbeEndstopWrapper:
-    def __init__(self, config):
+    def __init__(self, config, mark):
         self.printer = config.get_printer()
         self.gcode_move = self.printer.load_object(config, 'gcode_move')
         self.position_endstop = config.getfloat('z_offset')
@@ -327,20 +375,38 @@ class ProbeEndstopWrapper:
             config, 'deactivate_gcode', '')
         # Create an "endstop" object to handle the probe pin
         ppins = self.printer.lookup_object('pins')
-        pin = config.get('pin')
-        pin_params = ppins.lookup_pin(pin, can_invert=True, can_pullup=True)
-        mcu = pin_params['chip']
-        self.mcu_endstop = mcu.setup_pin('endstop', pin_params)
-        self.printer.register_event_handler('klippy:mcu_identify',
-                                            self._handle_mcu_identify)
-        # Wrappers
-        self.get_mcu = self.mcu_endstop.get_mcu
-        self.add_stepper = self.mcu_endstop.add_stepper
-        self.get_steppers = self.mcu_endstop.get_steppers
-        self.home_start = self.mcu_endstop.home_start
-        self.home_wait = self.mcu_endstop.home_wait
-        self.query_endstop = self.mcu_endstop.query_endstop
-        # multi probes state
+        if mark == 'probe':
+            pin = config.get('pin')
+            pin_params = ppins.lookup_pin(pin, can_invert=True, can_pullup=True)
+            mcu = pin_params['chip']
+            self.mcu_endstop = mcu.setup_pin('endstop', pin_params)
+            self.printer.register_event_handler('klippy:mcu_identify',
+                                                self._handle_mcu_identify)
+            pin = config.get('zmax_pin',None)
+            # Wrappers
+            self.get_mcu = self.mcu_endstop.get_mcu
+            self.add_stepper = self.mcu_endstop.add_stepper
+            self.get_steppers = self.mcu_endstop.get_steppers
+            self.home_start = self.mcu_endstop.home_start
+            self.home_wait = self.mcu_endstop.home_wait
+            self.query_endstop = self.mcu_endstop.query_endstop
+            # multi probes state
+        elif mark == 'zmaxprobe' and config.get('zmax_pin',None):
+            pin = config.get('zmax_pin')
+            pin_params = ppins.lookup_pin(pin, can_invert=True, can_pullup=True)
+            mcu = pin_params['chip']
+            self.mcu_endstop = mcu.setup_pin('endstop', pin_params)
+            self.printer.register_event_handler('klippy:mcu_identify',
+                                                self._handle_mcu_identify)
+            pin = config.get('pin')
+            # Wrappers
+            self.get_mcu = self.mcu_endstop.get_mcu
+            self.add_stepper = self.mcu_endstop.add_stepper
+            self.get_steppers = self.mcu_endstop.get_steppers
+            self.home_start = self.mcu_endstop.home_start
+            self.home_wait = self.mcu_endstop.home_wait
+            self.query_endstop = self.mcu_endstop.query_endstop
+            # multi probes state
         self.multi = 'OFF'
     def _handle_mcu_identify(self):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
@@ -477,4 +543,4 @@ class ProbePointsHelper:
         self._manual_probe_start()
 
 def load_config(config):
-    return PrinterProbe(config, ProbeEndstopWrapper(config))
+    return PrinterProbe(config, ProbeEndstopWrapper(config, 'probe'), ProbeEndstopWrapper(config, 'zmaxprobe'))
