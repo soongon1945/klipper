@@ -27,7 +27,7 @@ class RunoutHelper:
         self.event_delay = config.getfloat('event_delay', 3., above=0.)
         # Internal state
         self.min_event_systime = self.reactor.NEVER
-        self.filament_present = True
+        self.filament_present = False
         self.sensor_enabled = True
         # Register commands and event handlers
         self.printer.register_event_handler("klippy:ready", self._handle_ready)
