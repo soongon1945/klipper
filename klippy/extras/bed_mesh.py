@@ -1282,6 +1282,10 @@ class ProfileManager:
         self.current_profile = prof_name
         self.bedmesh.set_mesh(z_mesh)
     def remove_profile(self, prof_name):
+        if prof_name in 'default':
+            self.gcode.respond_info(
+                "The default configuration cannot be deleted.\n")
+            return
         if prof_name in self.profiles:
             configfile = self.printer.lookup_object('configfile')
             configfile.remove_section('bed_mesh ' + prof_name)
