@@ -181,14 +181,38 @@ class GCodeDispatch:
                 pattern = f"{re.escape('max_z_height: ')}(-?\d+(\.\d+)?)"
                 use_match = re.search(pattern, line)
                 if use_match:
-                    zmax_value = float(use_match.group(1))
+                    xyzmax_value = float(use_match.group(1))
                     kin = self.printer.lookup_object('toolhead').get_kinematics()
                     toolhead = self.printer.lookup_object('toolhead')
                     axes_max = kin.axes_max[2]
-                    if zmax_value > axes_max:
-                        toolhead.set_zmax_error(True, zmax_value, axes_max)
+                    if xyzmax_value > axes_max:
+                        toolhead.set_xyzmax_error(True, xyzmax_value, axes_max)
                 else:
-                    zmax_value = 0
+                    xyzmax_value = 0
+            elif cpos == 0 and 'max_x_length:' in line:
+                pattern = f"{re.escape('max_x_length: ')}(-?\d+(\.\d+)?)"
+                use_match = re.search(pattern, line)
+                if use_match:
+                    xyzmax_value = float(use_match.group(1))
+                    kin = self.printer.lookup_object('toolhead').get_kinematics()
+                    toolhead = self.printer.lookup_object('toolhead')
+                    axes_max = kin.axes_max[0]
+                    if xyzmax_value > axes_max:
+                        toolhead.set_xyzmax_error(True, xyzmax_value, axes_max)
+                else:
+                    xyzmax_value = 0
+            elif cpos == 0 and 'max_y_width:' in line:
+                pattern = f"{re.escape('max_y_width: ')}(-?\d+(\.\d+)?)"
+                use_match = re.search(pattern, line)
+                if use_match:
+                    xyzmax_value = float(use_match.group(1))
+                    kin = self.printer.lookup_object('toolhead').get_kinematics()
+                    toolhead = self.printer.lookup_object('toolhead')
+                    axes_max = kin.axes_max[1]
+                    if xyzmax_value > axes_max:
+                        toolhead.set_xyzmax_error(True, xyzmax_value, axes_max)
+                else:
+                    xyzmax_value = 0
             if cpos >= 0:
                 line = line[:cpos]
             # Break line into parts and determine command
