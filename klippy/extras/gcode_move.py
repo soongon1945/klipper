@@ -248,6 +248,18 @@ class GCodeMove:
         self.absolute_extrude = state['absolute_extrude']
         self.base_position = list(state['base_position'])
         self.homing_position = list(state['homing_position'])
+        toolhead = self.printer.lookup_object('toolhead')
+        if toolhead.get_extruder().get_name() == 'extruder':
+            gcmd.respond_info("Activating extruder111 %s" % (toolhead.get_extruder().get_name(),))
+            for pos, axis in enumerate('XYZ'):
+                self.base_position[pos] = 0 + self.e1_offset_position[3]
+                self.homing_position[pos] = 0 + self.e1_offset_position[3]
+        elif toolhead.get_extruder().get_name() == 'extruder1':
+            gcmd.respond_info("Activating extruder222 %s" % (toolhead.get_extruder().get_name(),))
+            for pos, axis in enumerate('XYZ'):
+                self.base_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
+                self.homing_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
+        gcmd.respond_info("Activating extruder333 %s" % (toolhead.get_extruder().get_name(),))
         self.speed = state['speed']
         self.speed_factor = state['speed_factor']
         self.extrude_factor = state['extrude_factor']
