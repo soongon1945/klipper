@@ -205,8 +205,9 @@ class GCodeMove:
             move_delta[pos] = delta
             self.base_position[pos] += delta
             self.homing_position[pos] = offset
+            if axis == 'Z':
+                self.e1_offset_position[3] += delta
         # Move the toolhead the given offset if requested
-        self.e1_offset_position[3] += delta
         if gcmd.get_int('MOVE', 0):
             speed = gcmd.get_float('MOVE_SPEED', self.speed, above=0.)
             for pos, delta in enumerate(move_delta):
