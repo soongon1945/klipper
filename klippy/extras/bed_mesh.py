@@ -662,8 +662,11 @@ class BedMeshCalibrate:
     def probe_finalize(self, offsets, positions):
         x_offset, y_offset, z_offset = offsets
         probe = self.printer.lookup_object('probe', None)
-        if probe is not None and probe.get_endstop_config():
-            z_offset = positions[0][2]
+        if probe is not None:
+            if probe.get_endstop_config():
+                z_offset = positions[0][2]
+            else:
+                z_offset = 0
         positions = [[round(p[0], 2), round(p[1], 2), p[2]]
                      for p in positions]
         if self.zero_reference_mode == ZrefMode.PROBE :

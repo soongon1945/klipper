@@ -30,6 +30,7 @@ class PrinterProbe:
         self.multi_probe_pending = False
         self.last_state = False
         self.last_z_result = 0.
+        self.first_z_result = 0.
         self.endstop_config = ''
         self.gcode_move = self.printer.load_object(config, "gcode_move")
         # Infer Z position to move to during a probe
@@ -145,6 +146,14 @@ class PrinterProbe:
             if "Timeout during endstop homing" in reason:
                 reason += HINT_TIMEOUT
             raise self.printer.command_error(reason)
+        if self.get_endstop_config() == False:
+            self.gcode.respond_info("first_z_result %.3f"
+                                    % (self.first_z_result))
+            if self.first_z_result == 0:
+                self.first_z_result = epos[2]
+                epos[2] = 0
+            else:
+                epos[2] = epos[2] - self.first_z_result
         self.gcode.respond_info("probe at %.3f,%.3f is z=%.6f"
                                 % (epos[0], epos[1], epos[2]))
         return epos[:3]
@@ -523,6 +532,7 @@ class ProbePointsHelper:
             raise gcmd.error("horizontal_move_z can't be less than"
                              " probe's z_offset")
         probe.multi_probe_begin()
+        probe.first_z_result = 0.
         while 1:
             done = self._move_next()
             if done:
