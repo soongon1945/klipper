@@ -37,6 +37,9 @@ class ManualProbe:
                 'SET_NOZZLE_SIZE',
                 self.cmd_SET_NOZZLE_SIZE,
                 desc=self.cmd_SET_NOZZLE_SIZE_help)
+        self.gcode.register_command('E_OFFSET_APPLY_PROBE',
+                    self.cmd_E_OFFSET_APPLY_PROBE,
+                    desc=self.cmd_E_OFFSET_APPLY_PROBE_help)
         if self.z_position_endstop is not None:
             self.gcode.register_command(
                 'Z_ENDSTOP_CALIBRATE', self.cmd_Z_ENDSTOP_CALIBRATE,
@@ -105,6 +108,27 @@ class ManualProbe:
                 "with the above and restart the printer." % (new_calibrate))
             configfile.set('stepper_z', 'position_endstop',
                 "%.3f" % (new_calibrate,))
+    def cmd_E_OFFSET_APPLY_PROBE(self,gcmd):
+        offset_pos = " ".join(["%s:%.6f"  % (a, v)
+                        for a, v in zip("XYZ", self.gcode_move.e1_offset_position)])
+#        self.gcode.respond_info("%s: Save offset_pos: %s\n"
+#                          % (self.name, offset_pos))
+        offset = self.gcode_move.e1_offset_position[3]
+        configfile = self.printer.lookup_object('configfile')
+        new_calibrate = self.z_position_endstop - offset
+        self.gcode.respond_info(
+            "stepper_z: position_endstop: %.3f\n"
+            "%s: z_offset: %s\n"
+            "The SAVE_CONFIG command will update the printer config file\n"
+            "with the above and restart the printer." % (new_calibrate, 'probe', offset_pos))
+        configfile = self.printer.lookup_object('configfile')
+        configfile.set('probe', 'e_x_offset', "%.3f" % (self.gcode_move.e1_offset_position[0],))
+        configfile.set('probe', 'e_y_offset', "%.3f" % (self.gcode_move.e1_offset_position[1],))
+        configfile.set('probe', 'e_z_offset', "%.3f" % (self.gcode_move.e1_offset_position[2],))
+        if offset:
+            configfile.set('stepper_z', 'position_endstop',
+                    "%.3f" % (new_calibrate,))
+    cmd_E_OFFSET_APPLY_PROBE_help = "Adjust the probe's z_offset"
     def cmd_Z_OFFSET_APPLY_DELTA_ENDSTOPS(self,gcmd):
         offset = self.gcode_move.get_status()['homing_origin'].z
         configfile = self.printer.lookup_object('configfile')
