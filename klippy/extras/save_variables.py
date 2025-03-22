@@ -37,6 +37,8 @@ class SaveVariables:
         if 'was_interrupted' in allvars and 'byte' in allvars:
             if self.allVariables['was_interrupted'] == True:
                 self.was_interrupted = True
+            else:
+                self.was_interrupted = False
         else:
             self.was_interrupted = False
     cmd_SAVE_VARIABLE_help = "Save arbitrary variables to disk"

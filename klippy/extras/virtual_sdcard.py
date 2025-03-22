@@ -232,7 +232,19 @@ class VirtualSD:
         self.reactor.unregister_timer(self.work_timer)
         if self.save_variables.was_interrupted and self.allow_interrupt:
             self.file_position = self.save_variables.allVariables['byte']
+            self.current_file.seek(self.file_position)
             self.save_variables.was_interrupted = False
+            for i in range(10):
+                try:
+                    ack = True
+                    data = self.current_file.read(10)
+                except:
+                    ack = False
+                    logging.exception("virtual_sdcard read")
+                    self.file_position = self.file_position + 10
+                    self.current_file.seek(self.file_position)
+                if ack:
+                    break
         try:
             self.current_file.seek(self.file_position)
         except:
