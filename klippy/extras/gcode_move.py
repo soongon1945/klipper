@@ -226,6 +226,15 @@ class GCodeMove:
             delta = offset - self.homing_position[pos]
             move_delta[pos] = delta
             self.e1_offset_position[pos] += delta
+        toolhead = self.printer.lookup_object('toolhead')
+        if toolhead.get_extruder().get_name() == 'extruder':
+            for pos, axis in enumerate('XYZ'):
+                self.base_position[pos] = 0 + self.e1_offset_position[3]
+                self.homing_position[pos] = 0 + self.e1_offset_position[3]
+        elif toolhead.get_extruder().get_name() == 'extruder1':
+            for pos, axis in enumerate('XYZ'):
+                self.base_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
+                self.homing_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
     cmd_SAVE_GCODE_STATE_help = "Save G-Code coordinate state"
     def cmd_SAVE_GCODE_STATE(self, gcmd):
         state_name = gcmd.get('NAME', 'default')
@@ -251,16 +260,13 @@ class GCodeMove:
         self.homing_position = list(state['homing_position'])
         toolhead = self.printer.lookup_object('toolhead')
         if toolhead.get_extruder().get_name() == 'extruder':
-            gcmd.respond_info("Activating extruder111 %s" % (toolhead.get_extruder().get_name(),))
             for pos, axis in enumerate('XYZ'):
                 self.base_position[pos] = 0 + self.e1_offset_position[3]
                 self.homing_position[pos] = 0 + self.e1_offset_position[3]
         elif toolhead.get_extruder().get_name() == 'extruder1':
-            gcmd.respond_info("Activating extruder222 %s" % (toolhead.get_extruder().get_name(),))
             for pos, axis in enumerate('XYZ'):
                 self.base_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
                 self.homing_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
-        gcmd.respond_info("Activating extruder333 %s" % (toolhead.get_extruder().get_name(),))
         self.speed = state['speed']
         self.speed_factor = state['speed_factor']
         self.extrude_factor = state['extrude_factor']
