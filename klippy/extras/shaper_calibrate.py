@@ -330,9 +330,15 @@ class ShaperCalibrate:
             self.save_params(configfile, 'x', shaper_name, shaper_freq)
             self.save_params(configfile, 'y', shaper_name, shaper_freq)
         else:
-            configfile.set('input_shaper', 'shaper_type_'+axis, shaper_name)
-            configfile.set('input_shaper', 'shaper_freq_'+axis,
-                           '%.1f' % (shaper_freq,))
+            toolhead = self.printer.lookup_object('toolhead')
+            if toolhead.get_extruder().get_name() == 'extruder':
+                configfile.set('input_shaper', 'shaper_type_'+axis, shaper_name)
+                configfile.set('input_shaper', 'shaper_freq_'+axis,
+                            '%.1f' % (shaper_freq,))
+            elif toolhead.get_extruder().get_name() == 'extruder1':
+                configfile.set('input_shaper1', 'shaper_type_'+axis, shaper_name)
+                configfile.set('input_shaper1', 'shaper_freq_'+axis,
+                            '%.1f' % (shaper_freq,))
 
     def apply_params(self, input_shaper, axis, shaper_name, shaper_freq):
         if axis == 'xy':
