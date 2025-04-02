@@ -235,6 +235,12 @@ class GCodeMove:
             for pos, axis in enumerate('XYZ'):
                 self.base_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
                 self.homing_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
+        # Move the toolhead the given offset if requested
+        if gcmd.get_int('MOVE', 0):
+            speed = gcmd.get_float('MOVE_SPEED', self.speed, above=0.)
+            for pos, delta in enumerate(move_delta):
+                self.last_position[pos] += delta
+            self.move_with_transform(self.last_position, speed)
     cmd_SAVE_GCODE_STATE_help = "Save G-Code coordinate state"
     def cmd_SAVE_GCODE_STATE(self, gcmd):
         state_name = gcmd.get('NAME', 'default')
