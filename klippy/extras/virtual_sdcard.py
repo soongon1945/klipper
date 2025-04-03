@@ -234,6 +234,7 @@ class VirtualSD:
             self.file_position = self.save_variables.allVariables['byte']
             self.current_file.seek(self.file_position)
             self.save_variables.was_interrupted = False
+            self.allow_interrupt = False
             for i in range(10):
                 try:
                     ack = True
