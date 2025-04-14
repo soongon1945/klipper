@@ -212,7 +212,9 @@ class ToolHead:
                                             self._handle_shutdown)
         # Velocity and acceleration control
         self.max_velocity = config.getfloat('max_velocity', above=0.)
+        self.max_velocity_buf = self.max_velocity
         self.max_accel = config.getfloat('max_accel', above=0.)
+        self.max_accel_buf = self.max_accel
         self.requested_accel_to_decel = config.getfloat(
             'max_accel_to_decel', self.max_accel * 0.5, above=0.)
         self.max_accel_to_decel = self.requested_accel_to_decel
@@ -583,8 +585,12 @@ class ToolHead:
         requested_accel_to_decel = gcmd.get_float(
             'ACCEL_TO_DECEL', None, above=0.)
         if max_velocity is not None:
+            if max_velocity > self.max_velocity_buf:
+                max_velocity = self.max_velocity_buf
             self.max_velocity = max_velocity
         if max_accel is not None:
+            if max_accel > self.max_accel_buf:
+                max_accel = self.max_accel_buf
             self.max_accel = max_accel
         if square_corner_velocity is not None:
             self.square_corner_velocity = square_corner_velocity
@@ -616,6 +622,8 @@ class ToolHead:
                                   % (gcmd.get_commandline(),))
                 return
             accel = min(p, t)
+        if accel > self.max_accel_buf:
+            accel = self.max_accel_buf
         self.max_accel = accel
         self._calc_junction_deviation()
 
