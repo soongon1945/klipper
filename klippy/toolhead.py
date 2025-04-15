@@ -218,6 +218,7 @@ class ToolHead:
         self.requested_accel_to_decel = config.getfloat(
             'max_accel_to_decel', self.max_accel * 0.5, above=0.)
         self.max_accel_to_decel = self.requested_accel_to_decel
+        self.requested_accel_to_decel_buf = self.requested_accel_to_decel
         self.square_corner_velocity = config.getfloat(
             'square_corner_velocity', 5., minval=0.)
         self.junction_deviation = 0.
@@ -595,6 +596,8 @@ class ToolHead:
         if square_corner_velocity is not None:
             self.square_corner_velocity = square_corner_velocity
         if requested_accel_to_decel is not None:
+            if requested_accel_to_decel > self.requested_accel_to_decel_buf:
+                requested_accel_to_decel = self.requested_accel_to_decel_buf
             self.requested_accel_to_decel = requested_accel_to_decel
         self._calc_junction_deviation()
         msg = ("max_velocity: %.6f\n"
