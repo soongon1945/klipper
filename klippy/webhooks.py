@@ -421,6 +421,10 @@ class GCodeHelper:
         # Output subscription tracking
         self.is_output_registered = False
         self.clients = {}
+        model_path = '/home/mks/printer_data/config/printer_model.conf'
+        if os.path.exists(model_path):
+            with open(model_path, 'r') as file:
+                self.model_name = file.readlines()
         # Register webhooks
         wh = printer.lookup_object('webhooks')
         wh.register_endpoint("gcode/help", self._handle_help)
@@ -433,7 +437,134 @@ class GCodeHelper:
     def _handle_help(self, web_request):
         web_request.send(self.gcode.get_command_help())
     def _handle_script(self, web_request):
-        self.gcode.run_script(web_request.get_str('script'))
+        gcode_move = self.printer.lookup_object('gcode_move')
+        original_script = web_request.get_str('script')
+        script_lines = original_script.split('\n')
+        modified_script = []
+
+        current_mode = 'G90'  # 默认绝对模式
+        last_position = gcode_move.last_position.copy()  # 跟踪模拟位置
+        need_y_reset = False  # 标记是否需要插入Y复位指令
+        y_reset_inserted = False  # 标记是否已插入Y复位指令
+
+        if 'P300' in str(self.model_name):
+            # 第一遍扫描：检查是否需要插入Y复位指令
+            for line in script_lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                if line.startswith('G1'):
+                    params = {}
+                    parts = line.split()
+                    for part in parts[1:]:
+                        if part[0] in 'XYEF':
+                            try:
+                                params[part[0]] = float(part[1:])
+                            except ValueError:
+                                continue
+
+                    # 计算真实目标位置
+                    target_x = last_position[0]
+                    if 'X' in params:
+                        target_x = params['X'] if current_mode == 'G90' else last_position[0] + params['X']
+
+                    # 检查是否需要插入Y复位
+                    if (70 <= last_position[0] <= 230) and (target_x < 70 or target_x > 230) and (
+                            last_position[1] > 300):
+                        need_y_reset = True
+                        break
+
+                # 更新模式
+                if line.startswith('G90'):
+                    current_mode = 'G90'
+                elif line.startswith('G91'):
+                    current_mode = 'G91'
+
+                # 更新位置
+                if line.startswith('G1'):
+                    if 'X' in params:
+                        last_position[0] = params['X'] if current_mode == 'G90' else last_position[0] + params['X']
+                    if 'Y' in params:
+                        last_position[1] = params['Y'] if current_mode == 'G90' else last_position[1] + params['Y']
+
+            # 重置状态
+            current_mode = 'G90'
+            last_position = gcode_move.last_position.copy()
+
+            # 第二遍扫描：构建修改后的脚本
+            if need_y_reset:
+                modified_script.append('G1 Y300 F3000\n')
+                y_reset_inserted = True
+                last_position[1] = 300
+
+            for line in script_lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                # 更新当前坐标模式
+                if line.startswith('G90'):
+                    current_mode = 'G90'
+                    modified_script.append(line + '\n')
+                    continue
+                elif line.startswith('G91'):
+                    current_mode = 'G91'
+                    modified_script.append(line + '\n')
+                    continue
+
+                if line.startswith('G1'):
+                    params = {}
+                    parts = line.split()
+                    for part in parts[1:]:
+                        if part[0] in 'XYEF':
+                            try:
+                                params[part[0]] = float(part[1:])
+                            except ValueError:
+                                continue
+
+                    # 计算目标位置
+                    target_x = last_position[0]
+                    target_y = last_position[1]
+                    if 'X' in params:
+                        target_x = params['X'] if current_mode == 'G90' else last_position[0] + params['X']
+                    if 'Y' in params:
+                        target_y = params['Y'] if current_mode == 'G90' else last_position[1] + params['Y']
+
+                    # 情况1：X在越界区域时，限制Y值
+                    if (target_x < 70 or target_x > 230) and 'Y' in params and target_y >= 300:
+                        if current_mode == 'G90':
+                            # 绝对模式：直接设置Y=300
+                            new_line = 'G1 ' + ' '.join([f'Y300' if p.startswith('Y') else p for p in parts[1:]]) + '\n'
+                            modified_script.append(new_line)
+                        else:
+                            # 相对模式：计算需要移动多少才能让Y=300
+                            required_y_move = 300 - last_position[1]
+                            new_line = 'G1 ' + ' '.join(
+                                [f'Y{required_y_move}' if p.startswith('Y') else p for p in parts[1:]]) + '\n'
+                            modified_script.append(new_line)
+
+                        # 更新位置
+                        last_position[1] = 300
+                        if 'X' in params:
+                            last_position[0] = target_x
+
+                    else:
+                        modified_script.append(line + '\n')
+                        if 'X' in params:
+                            last_position[0] = target_x
+                        if 'Y' in params:
+                            last_position[1] = target_y
+                else:
+                    modified_script.append(line + '\n')
+
+            # 执行修改后的脚本
+            final_script = ''.join(modified_script).strip()
+            logging.info("Modified script:\n%s", final_script)
+            self.gcode.run_script(final_script)
+        else:
+            logging.info("Original script:\n%s", original_script)
+            self.gcode.run_script(original_script)
     def _handle_restart(self, web_request):
         self.gcode.run_script('restart')
     def _handle_firmware_restart(self, web_request):
