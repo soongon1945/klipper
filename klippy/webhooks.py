@@ -448,7 +448,7 @@ class GCodeHelper:
         need_y_reset = False  # 标记是否需要插入Y复位指令
         y_reset_inserted = False  # 标记是否已插入Y复位指令
 
-        if 'P300' in str(self.model_name):
+        if 'P300' in str(self.model_name) or 'P260' in str(self.model_name):
             # 第一遍扫描：检查是否需要插入Y复位指令
             for line in script_lines:
                 line = line.strip()
