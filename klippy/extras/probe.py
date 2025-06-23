@@ -84,6 +84,9 @@ class PrinterProbe:
         self.gcode.register_command('Z_OFFSET_APPLY_PROBE',
                                     self.cmd_Z_OFFSET_APPLY_PROBE,
                                     desc=self.cmd_Z_OFFSET_APPLY_PROBE_help)
+        self.gcode.register_command('E_OFFSET_APPLY_PROBE',
+                                    self.cmd_E_OFFSET_APPLY_PROBE,
+                                    desc=self.cmd_E_OFFSET_APPLY_PROBE_help)
     def _handle_homing_move_begin(self, hmove):
         if self.mcu_probe in hmove.get_mcu_endstops():
             self.mcu_probe.probe_prepare(hmove)
@@ -348,6 +351,24 @@ class PrinterProbe:
                 % (self.name, new_calibrate))
             configfile.set(self.name, 'z_offset', "%.3f" % (new_calibrate,))
     cmd_Z_OFFSET_APPLY_PROBE_help = "Adjust the probe's z_offset"
+
+    def cmd_E_OFFSET_APPLY_PROBE(self,gcmd):
+        offset = self.gcode_move.get_status()['homing_origin'].z
+        configfile = self.printer.lookup_object('configfile')
+        configfile.set('probe', 'e_x_offset', "%.3f" % (self.gcode_move.e1_offset_position[0],))
+        configfile.set('probe', 'e_y_offset', "%.3f" % (self.gcode_move.e1_offset_position[1],))
+        configfile.set('probe', 'e_z_offset', "%.3f" % (self.gcode_move.e1_offset_position[2],))
+        if offset == 0:
+            self.gcode.respond_info("Nothing to do: Z Offset is 0")
+        else:
+            new_calibrate = self.z_offset - offset
+            self.gcode.respond_info(
+                "%s: z_offset: %.3f\n"
+                "The SAVE_CONFIG command will update the printer config file\n"
+                "with the above and restart the printer."
+                % (self.name, new_calibrate))
+            configfile.set(self.name, 'z_offset', "%.3f" % (new_calibrate,))
+    cmd_E_OFFSET_APPLY_PROBE_help = "Adjust the probe's z_offset"
 
 # Endstop wrapper that enables probe specific features
 class ProbeEndstopWrapper:
