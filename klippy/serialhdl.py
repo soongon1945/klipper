@@ -128,6 +128,7 @@ class SerialReader:
         # Start connection attempt
         logging.info("%sStarting CAN connect", self.warn_prefix)
         start_time = self.reactor.monotonic()
+        iface_retried = False
         while 1:
             if self.reactor.monotonic() > start_time + 90.:
                 self._error("Unable to connect")
@@ -144,7 +145,27 @@ class SerialReader:
             bus.close = bus.shutdown # XXX
             ret = self._start_session(bus, b'c', txid)
             if not ret:
-                continue
+                canbus_iface = "can1"
+                try:
+                    bus = can.interface.Bus(channel=canbus_iface,
+                                            can_filters=filters,
+                                            bustype='socketcan')
+                    bus.send(set_id_msg)
+                except (can.CanError, os.error) as e:
+                    logging.warn("%sUnable to open CAN port: %s",
+                                 self.warn_prefix, e)
+                    if not iface_retried and canbus_iface == "can0":
+                        canbus_iface = "can1"
+                        iface_retried = True
+                        logging.info("%sRetrying with CAN interface %s",
+                                self.warn_prefix, canbus_iface)
+                        continue
+                    self.reactor.pause(self.reactor.monotonic() + 5.)
+                    continue
+                bus.close = bus.shutdown  # XXX
+                ret = self._start_session(bus, b'c', txid)
+                if not ret:
+                    continue
             # Verify correct canbus_nodeid to canbus_uuid mapping
             try:
                 params = self.send_with_response('get_canbus_id', 'canbus_id')
