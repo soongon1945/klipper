@@ -422,7 +422,7 @@ class GCodeHelper:
         self.is_output_registered = False
         self.clients = {}
         self.model_name = []
-        model_path = '/home/mks/printer_data/config/printer_model.conf'
+        model_path = '/home/kickpi/printer_data/config/printer_model.conf'
         if os.path.exists(model_path):
             with open(model_path, 'r') as file:
                 self.model_name = file.readlines()
