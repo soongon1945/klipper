@@ -233,6 +233,20 @@ class PrinterConfig:
             self._parse_config(include_data, include_filename, fileconfig,
                                visited)
         return include_filenames
+    def append_fileconfig(self, fileconfig, data, filename):
+        if not data:
+            return
+        # Strip trailing comments
+        lines = data.split('\n')
+        for i, line in enumerate(lines):
+            pos = line.find('#')
+            if pos >= 0:
+                lines[i] = line[:pos]
+        sbuffer = io.StringIO('\n'.join(lines))
+        if sys.version_info.major >= 3:
+            fileconfig.read_file(sbuffer, filename)
+        else:
+            fileconfig.readfp(sbuffer, filename)
     def _parse_config(self, data, filename, fileconfig, visited):
         path = os.path.abspath(filename)
         if path in visited:
@@ -241,7 +255,7 @@ class PrinterConfig:
         lines = data.split('\n')
         # Buffer lines between includes and parse as a unit so that overrides
         # in includes apply linearly as they do within a single file
-        buffer = []
+        buf = []
         for line in lines:
             # Strip trailing comment
             pos = line.find('#')
@@ -251,13 +265,14 @@ class PrinterConfig:
             mo = configparser.RawConfigParser.SECTCRE.match(line)
             header = mo and mo.group('header')
             if header and header.startswith('include '):
-                self._parse_config_buffer(buffer, filename, fileconfig)
+                self.append_fileconfig(fileconfig, '\n'.join(buf), filename)
+                del buf[:]
                 include_spec = header[8:].strip()
                 self._resolve_include(filename, include_spec, fileconfig,
                                       visited)
             else:
-                buffer.append(line)
-        self._parse_config_buffer(buffer, filename, fileconfig)
+                buf.append(line)
+        self.append_fileconfig(fileconfig, '\n'.join(buf), filename)
         visited.remove(path)
     def _build_config_wrapper(self, data, filename):
         if sys.version_info.major >= 3:
