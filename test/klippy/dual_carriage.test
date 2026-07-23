@@ -27,6 +27,17 @@ G91
 G1 X20 E.2
 G90
 
+# Restore a saved T0 position after switching to an offset T1.  The restore
+# move must absorb the nozzle offset before extrusion resumes; otherwise the
+# next move below is shortened enough to exceed max_extrude_cross_section.
+SET_GCODE_EOFFSET X=.61 Y=2.36 Z=.06
+G1 X100 Y100
+SAVE_GCODE_STATE NAME=filament_failover
+T1
+RESTORE_GCODE_STATE NAME=filament_failover MOVE=1
+M83
+G1 X100 Y98 E.2
+
 QUERY_ENDSTOPS
 
 # Servo tests

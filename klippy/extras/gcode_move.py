@@ -284,7 +284,15 @@ class GCodeMove:
         # Move the toolhead back if requested
         if gcmd.get_int('MOVE', 0):
             speed = gcmd.get_float('MOVE_SPEED', self.speed, above=0.)
-            self.last_position[:3] = state['last_position'][:3]
+            # A nozzle change may select a different XYZ origin after the
+            # state was saved.  Apply that origin during the non-extruding
+            # restore move so the first resumed print move does not absorb
+            # the nozzle offset and trip max_extrude_cross_section.
+            for pos in range(3):
+                saved_gcode_pos = (state['last_position'][pos]
+                                   - state['base_position'][pos])
+                self.last_position[pos] = (saved_gcode_pos
+                                           + self.base_position[pos])
             self.move_with_transform(self.last_position, speed)
     cmd_RECORD_GCODE_STATE_help = "Restore a previously saved G-Code state"
     def cmd_RECORD_GCODE_STATE(self, gcmd):
