@@ -69,5 +69,9 @@ SECTIONS
         // that isn't needed so no need to include them in the binary.
         *(.init)
         *(.fini)
+
+        // Klipper does not use C++ exception stack unwinding.
+        *(.ARM.extab)
+        *(.ARM.exidx)
     }
 }
