@@ -220,6 +220,14 @@ def lookup_minimum_z(config):
     pconfig = config.getsection('printer')
     return pconfig.getfloat('minimum_z_position', 0., note_valid=False)
 
+# Helper to lookup the maximum Z position for the printer
+def lookup_maximum_z(config):
+    zconfig = manual_probe.lookup_z_endstop_config(config)
+    if zconfig is not None:
+        return zconfig.getfloat('position_max', note_valid=False)
+    raise config.error(
+        "Option 'zmax_pin' requires a Z axis with position_max")
+
 # Helper to lookup all the Z axis steppers
 class LookupZSteppers:
     def __init__(self, config, add_stepper_cb):
@@ -232,6 +240,112 @@ class LookupZSteppers:
         for stepper in kin.get_steppers():
             if stepper.is_active_axis('z'):
                 self.add_stepper_cb(stepper)
+
+# Support an optional upper Z reference switch used by tall printers
+class ZMaxEndstopHelper:
+    def __init__(self, config, param_helper):
+        self.printer = config.get_printer()
+        self.name = config.get_name()
+        self.default_speed = param_helper.speed
+        self.default_lift_speed = param_helper.lift_speed
+        self.default_retract_dist = param_helper.sample_retract_dist
+        self.gcode = self.printer.lookup_object('gcode')
+        zmax_pin = config.get('zmax_pin', None)
+        if zmax_pin is None:
+            return
+        # Allow a manually configured fallback for power-loss recovery.  A
+        # SAVE_CONFIG value is already accepted by config validation.
+        config.getfloat('z_max_position', None)
+        self.position_min = lookup_minimum_z(config)
+        self.position_max = lookup_maximum_z(config)
+        self.pending_position = None
+        ppins = self.printer.lookup_object('pins')
+        self.mcu_endstop = ppins.setup_pin('endstop', zmax_pin)
+        LookupZSteppers(config, self.mcu_endstop.add_stepper)
+        self.gcode.register_command(
+            'ZMAX_PROBE_CALIBRATE', self.cmd_ZMAX_PROBE_CALIBRATE,
+            desc=self.cmd_ZMAX_PROBE_CALIBRATE_help)
+    def _probe_zmax(self, speed):
+        toolhead = self.printer.lookup_object('toolhead')
+        eventtime = self.printer.get_reactor().monotonic()
+        if 'z' not in toolhead.get_status(eventtime)['homed_axes']:
+            raise self.printer.command_error(
+                "Must home Z before ZMAX_PROBE_CALIBRATE")
+        pos = toolhead.get_position()
+        if pos[2] >= self.position_max:
+            raise self.printer.command_error(
+                "ZMAX_PROBE_CALIBRATE requires Z below position_max")
+        pos[2] = self.position_max
+        # The upper switch is sampled only during this probing move.  Standard
+        # probing_move checks pre-trigger and stops at the software Z maximum.
+        phoming = self.printer.lookup_object('homing')
+        epos = phoming.probing_move(self.mcu_endstop, pos, speed)
+        self.gcode.respond_info(
+            "Z max endstop triggered at z=%.6f" % (epos[2],))
+        return epos
+    def _retract_from_zmax(self, retract_dist, lift_speed):
+        toolhead = self.printer.lookup_object('toolhead')
+        current_z = toolhead.get_position()[2]
+        retract_z = max(self.position_min, current_z - retract_dist)
+        toolhead.manual_move([None, None, retract_z], lift_speed)
+    def _clear_confirmation(self):
+        self.gcode.register_command('ACCEPT', None)
+        self.gcode.register_command('ABORT', None)
+        self.pending_position = None
+    cmd_ACCEPT_help = "Save the measured upper Z reference"
+    def cmd_ACCEPT(self, gcmd):
+        z_max_position = self.pending_position
+        self._clear_confirmation()
+        self.gcode.respond_info(
+            "%s: z_max_position: %.3f\n"
+            "The SAVE_CONFIG command will update the printer config file\n"
+            "with the above and restart the printer."
+            % (self.name, z_max_position))
+        configfile = self.printer.lookup_object('configfile')
+        configfile.set(self.name, 'z_max_position',
+                       "%.3f" % (z_max_position,))
+    cmd_ABORT_help = "Discard the measured upper Z reference"
+    def cmd_ABORT(self, gcmd):
+        self._clear_confirmation()
+        self.gcode.respond_info("Z max calibration aborted")
+    def _start_confirmation(self, z_max_position):
+        # Cache the endstop trigger coordinate and expose no TESTZ command.
+        # Moving after the upper switch triggers would otherwise be unmonitored
+        # and ACCEPT could save a coordinate other than the measured limit.
+        self.pending_position = z_max_position
+        accept_registered = False
+        try:
+            self.gcode.register_command(
+                'ACCEPT', self.cmd_ACCEPT, desc=self.cmd_ACCEPT_help)
+            accept_registered = True
+            self.gcode.register_command(
+                'ABORT', self.cmd_ABORT, desc=self.cmd_ABORT_help)
+        except self.printer.config_error:
+            if accept_registered:
+                self.gcode.register_command('ACCEPT', None)
+            self.pending_position = None
+            raise
+        self.gcode.respond_info(
+            "Z max position is %.3f. Use ACCEPT to save or ABORT to cancel."
+            % (z_max_position,))
+    cmd_ZMAX_PROBE_CALIBRATE_help = "Probe or calibrate the upper Z reference"
+    def cmd_ZMAX_PROBE_CALIBRATE(self, gcmd):
+        save = gcmd.get_int('SAVE', 0, minval=0, maxval=1)
+        # Any active manual calibration owns the toolhead.  Check even when
+        # SAVE=0 so this automatic move cannot disrupt that calibration.
+        manual_probe.verify_no_manual_probe(self.printer)
+        speed = gcmd.get_float('PROBE_SPEED', self.default_speed, above=0.)
+        epos = self._probe_zmax(speed)
+        if save:
+            retract_dist = gcmd.get_float(
+                'SAMPLE_RETRACT_DIST', self.default_retract_dist, above=0.)
+            lift_speed = gcmd.get_float(
+                'LIFT_SPEED', self.default_lift_speed, above=0.)
+            # Calibration may safely retract before confirmation because the
+            # measured trigger coordinate is cached.  SAVE=0 intentionally
+            # stays at the switch for the recovery macro to establish Z.
+            self._retract_from_zmax(retract_dist, lift_speed)
+            self._start_confirmation(epos[2])
 
 # Support homing via probe using the probe:z_virtual_endstop pseudo-pin
 class HomingViaProbeHelper:
@@ -638,6 +752,7 @@ class PrinterProbe:
         self.printer = config.get_printer()
         self.probe_offsets = ProbeOffsetsHelper(config)
         self.param_helper = ProbeParameterHelper(config)
+        self.zmax_helper = ZMaxEndstopHelper(config, self.param_helper)
         self.mcu_probe = ProbeEndstopWrapper(config, self.probe_offsets,
                                              self.param_helper)
         self.probe_session = SampleAveragingHelper(

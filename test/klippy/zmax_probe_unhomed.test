@@ -1,0 +1,6 @@
+# The upper reference is meaningful only after Z has a known position.
+CONFIG z_virtual_endstop.cfg
+DICTIONARY atmega2560.dict
+EXPECTED_ERROR Must home Z before ZMAX_PROBE_CALIBRATE
+
+ZMAX_PROBE_CALIBRATE

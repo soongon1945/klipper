@@ -6,6 +6,24 @@ DICTIONARY atmega2560.dict
 G28
 G1 F6000
 
+# The optional upper switch must work without opening a manual session when
+# SAVE=0, and ABORT must not queue a stale calibration value.
+G1 Z10
+ZMAX_PROBE_CALIBRATE PROBE_SPEED=10 SAVE=0
+ASSERT_ZMAX_AT_TRIGGER
+G1 Z10
+ZMAX_PROBE_CALIBRATE PROBE_SPEED=10 SAVE=1
+ASSERT_ZMAX_RETRACTED
+ABORT
+ASSERT_NO_ZMAX_PENDING
+
+# KlipperScreen follows SAVE=1 with ACCEPT to persist the upper reference.
+G1 Z10
+ZMAX_PROBE_CALIBRATE PROBE_SPEED=10 SAVE=1
+ASSERT_ZMAX_RETRACTED
+ACCEPT
+ASSERT_ZMAX_PENDING
+
 # KlipperScreen uses the probe-specific command on virtual Z endstops.
 SET_GCODE_OFFSET Z=0.1
 E_OFFSET_APPLY_PROBE

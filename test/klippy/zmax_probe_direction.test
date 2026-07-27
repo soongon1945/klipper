@@ -1,0 +1,8 @@
+# An upper probe must never be started at or above the software Z maximum.
+CONFIG z_virtual_endstop.cfg
+DICTIONARY atmega2560.dict
+EXPECTED_ERROR ZMAX_PROBE_CALIBRATE requires Z below position_max
+
+G28
+G1 Z200
+ZMAX_PROBE_CALIBRATE
