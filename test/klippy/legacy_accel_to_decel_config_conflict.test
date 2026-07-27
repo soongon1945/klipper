@@ -1,0 +1,4 @@
+# Mixing the legacy and current config options must fail explicitly.
+CONFIG legacy_accel_to_decel_config_conflict.cfg
+DICTIONARY atmega2560.dict
+EXPECTED_ERROR Options 'minimum_cruise_ratio' and 'max_accel_to_decel'

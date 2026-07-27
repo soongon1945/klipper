@@ -196,6 +196,9 @@ BUFFER_TIME_HIGH = 1.0
 BUFFER_TIME_START = 0.250
 PRIMING_CMD_TIME = 0.100
 
+def _accel_to_min_cruise_ratio(max_accel, accel_to_decel):
+    return 1. - min(1., accel_to_decel / max_accel)
+
 # Main code to track events (and their timing) on the printer toolhead
 class ToolHead:
     def __init__(self, config):
@@ -212,8 +215,25 @@ class ToolHead:
         # Runtime M204/SET_VELOCITY_LIMIT requests must never exceed the
         # configured acceleration ceiling, even after earlier limit changes.
         self.max_accel_buf = self.max_accel
-        self.min_cruise_ratio = config.getfloat('minimum_cruise_ratio',
-                                                0.5, below=1., minval=0.)
+        min_cruise_ratio = config.getfloat('minimum_cruise_ratio', None,
+                                           below=1., minval=0.)
+        accel_to_decel = config.getfloat('max_accel_to_decel', None,
+                                         above=0.)
+        if min_cruise_ratio is not None and accel_to_decel is not None:
+            raise config.error(
+                "Options 'minimum_cruise_ratio' and 'max_accel_to_decel' "
+                "may not be used together in section 'printer'")
+        if accel_to_decel is not None:
+            # Bundled configs and legacy UIs still use the pre-2025 option.
+            # Convert only at the boundary so planning retains one model.
+            config.deprecate('max_accel_to_decel')
+            min_cruise_ratio = _accel_to_min_cruise_ratio(
+                self.max_accel, accel_to_decel)
+        if min_cruise_ratio is None:
+            min_cruise_ratio = 0.5
+        self.min_cruise_ratio = config.getfloat(
+            'minimum_cruise_ratio', min_cruise_ratio,
+            below=1., minval=0.)
         self.square_corner_velocity = config.getfloat(
             'square_corner_velocity', 5., minval=0.)
         self.junction_deviation = self.mcr_pseudo_accel = 0.
@@ -534,6 +554,8 @@ class ToolHead:
                      'position': self.Coord(self.commanded_pos),
                      'max_velocity': self.max_velocity,
                      'max_accel': self.max_accel,
+                     # KlipperScreen reads this effective legacy value.
+                     'max_accel_to_decel': self.mcr_pseudo_accel,
                      'minimum_cruise_ratio': self.min_cruise_ratio,
                      'square_corner_velocity': self.square_corner_velocity,
                      'extra_axes': self.extra_axes_status})
@@ -603,6 +625,22 @@ class ToolHeadCommandHelper:
             'SQUARE_CORNER_VELOCITY', None, minval=0.)
         min_cruise_ratio = gcmd.get_float(
             'MINIMUM_CRUISE_RATIO', None, minval=0., below=1.)
+        accel_to_decel = gcmd.get_float('ACCEL_TO_DECEL', None, above=0.)
+        if min_cruise_ratio is not None and accel_to_decel is not None:
+            raise gcmd.error(
+                "SET_VELOCITY_LIMIT may not specify both "
+                "MINIMUM_CRUISE_RATIO and ACCEL_TO_DECEL")
+        if accel_to_decel is not None:
+            # Clamp first so legacy conversion matches the acceleration that
+            # set_max_velocities() will actually apply to the printer.
+            effective_accel = self.toolhead.max_accel
+            if max_accel is not None:
+                effective_accel = min(max_accel,
+                                      self.toolhead.max_accel_buf)
+            min_cruise_ratio = _accel_to_min_cruise_ratio(
+                effective_accel, accel_to_decel)
+            pconfig = self.printer.lookup_object('configfile')
+            pconfig.deprecate_gcode('SET_VELOCITY_LIMIT', 'ACCEL_TO_DECEL')
         mv, ma, scv, mcr = self.toolhead.set_max_velocities(
             max_velocity, max_accel, square_corner_velocity, min_cruise_ratio)
         msg = ("max_velocity: %.6f\n"

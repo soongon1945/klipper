@@ -1,0 +1,6 @@
+# Mixing the legacy and current command parameters is ambiguous.
+CONFIG legacy_accel_to_decel.cfg
+DICTIONARY atmega2560.dict
+EXPECTED_ERROR SET_VELOCITY_LIMIT may not specify both
+
+SET_VELOCITY_LIMIT MINIMUM_CRUISE_RATIO=0.5 ACCEL_TO_DECEL=1500
