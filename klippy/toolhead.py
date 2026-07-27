@@ -209,6 +209,9 @@ class ToolHead:
         self.max_velocity = config.getfloat('max_velocity', above=0.)
         self.max_velocity_buf = self.max_velocity
         self.max_accel = config.getfloat('max_accel', above=0.)
+        # Runtime M204/SET_VELOCITY_LIMIT requests must never exceed the
+        # configured acceleration ceiling, even after earlier limit changes.
+        self.max_accel_buf = self.max_accel
         self.min_cruise_ratio = config.getfloat('minimum_cruise_ratio',
                                                 0.5, below=1., minval=0.)
         self.square_corner_velocity = config.getfloat(

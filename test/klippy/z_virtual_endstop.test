@@ -6,6 +6,12 @@ DICTIONARY atmega2560.dict
 G28
 G1 F6000
 
+# KlipperScreen uses the probe-specific command on virtual Z endstops.
+SET_GCODE_OFFSET Z=0.1
+E_OFFSET_APPLY_PROBE
+ASSERT_E1_PROBE_PENDING
+SET_GCODE_OFFSET Z=0
+
 # Z / X / Y moves
 G1 Z1
 G1 X1

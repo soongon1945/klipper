@@ -38,7 +38,8 @@ class ManualProbe:
         # Register commands
         self.gcode = self.printer.lookup_object('gcode')
         self.gcode_move = self.printer.load_object(config, "gcode_move")
-        if config.has_section('probe'):
+        has_probe = config.has_section('probe')
+        if has_probe:
             probe_config = config.getsection('probe')
             # E1 calibration is written to [probe] by SAVE_CONFIG.  Restore it
             # before tool activation so a restart does not discard alignment.
@@ -47,7 +48,6 @@ class ManualProbe:
                 probe_config.getfloat('e_y_offset', 0.),
                 probe_config.getfloat('e_z_offset', 0.),
             ]
-        self.bed_mesh_bak = self.printer.load_object(config, "bed_mesh")
         self.gcode.register_command('MANUAL_PROBE', self.cmd_MANUAL_PROBE,
                                     desc=self.cmd_MANUAL_PROBE_help)
         # Endstop value for cartesian printers with separate Z axis
@@ -77,9 +77,6 @@ class ManualProbe:
                 'SET_NOZZLE_SIZE',
                 self.cmd_SET_NOZZLE_SIZE,
                 desc=self.cmd_SET_NOZZLE_SIZE_help)
-        self.gcode.register_command('E_OFFSET_APPLY_ENDSTOP',
-                    self.cmd_E_OFFSET_APPLY_ENDSTOP,
-                    desc=self.cmd_E_OFFSET_APPLY_ENDSTOP_help)
         if self.z_position_endstop is not None:
             self.gcode.register_command(
                 'Z_ENDSTOP_CALIBRATE', self.cmd_Z_ENDSTOP_CALIBRATE,
@@ -88,6 +85,11 @@ class ManualProbe:
                 'Z_OFFSET_APPLY_ENDSTOP',
                 self.cmd_Z_OFFSET_APPLY_ENDSTOP,
                 desc=self.cmd_Z_OFFSET_APPLY_ENDSTOP_help)
+        if has_probe:
+            self.gcode.register_command(
+                'E_OFFSET_APPLY_ENDSTOP',
+                self.cmd_E_OFFSET_APPLY_ENDSTOP,
+                desc=self.cmd_E_OFFSET_APPLY_ENDSTOP_help)
         # Linear delta printers with A,B,C towers
         if 'delta' == config.getsection('printer').get('kinematics'):
             self.gcode.register_command(
@@ -113,6 +115,8 @@ class ManualProbe:
     def z_endstop_finalize(self, mpresult):
         if mpresult is None:
             return
+        # Calibration is based on this probe result, not an arbitrary saved
+        # mesh point; it must also work when the optional bed_mesh is absent.
         z_pos = self.z_position_endstop - mpresult.bed_z
         self.gcode.respond_info(
             "%s: position_endstop: %.3f\n"
@@ -147,6 +151,32 @@ class ManualProbe:
                 "The SAVE_CONFIG command will update the printer config file\n"
                 "with the above and restart the printer." % (
                     self.z_endstop_config_name, new_calibrate))
+            configfile.set(self.z_endstop_config_name, 'position_endstop',
+                           "%.3f" % (new_calibrate,))
+    cmd_E_OFFSET_APPLY_ENDSTOP_help = "Save secondary nozzle offsets"
+    def cmd_E_OFFSET_APPLY_ENDSTOP(self, gcmd):
+        offset = self.gcode_move.e1_offset_position[3]
+        configfile = self.printer.lookup_object('configfile')
+        offsets = self.gcode_move.e1_offset_position
+        msg = ("probe: e_x_offset: %.3f e_y_offset: %.3f "
+               "e_z_offset: %.3f" % tuple(offsets[:3]))
+        if self.z_position_endstop is not None:
+            new_calibrate = self.z_position_endstop - offset
+            msg = "%s: position_endstop: %.3f\n%s" % (
+                self.z_endstop_config_name, new_calibrate, msg)
+        elif offset:
+            # Probe-only Z axes have no physical endstop value to update;
+            # still preserve the nozzle geometry and report the limitation.
+            msg += "\nGlobal Z offset was not applied: no position_endstop"
+        self.gcode.respond_info(
+            "%s\nThe SAVE_CONFIG command will update the printer config "
+            "file\nwith the above and restart the printer." % (msg,))
+        configfile.set('probe', 'e_x_offset', "%.3f" % (offsets[0],))
+        configfile.set('probe', 'e_y_offset', "%.3f" % (offsets[1],))
+        configfile.set('probe', 'e_z_offset', "%.3f" % (offsets[2],))
+        if offset and self.z_position_endstop is not None:
+            # The accumulated global Z adjustment belongs to the endstop;
+            # per-nozzle XYZ geometry remains in the probe section above.
             configfile.set(self.z_endstop_config_name, 'position_endstop',
                            "%.3f" % (new_calibrate,))
     def cmd_Z_OFFSET_APPLY_DELTA_ENDSTOPS(self,gcmd):

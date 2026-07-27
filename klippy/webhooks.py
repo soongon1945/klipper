@@ -450,8 +450,13 @@ class GCodeHelper:
     def _handle_help(self, web_request):
         web_request.send(self.gcode.get_command_help())
     def _handle_script(self, web_request):
-        gcode_move = self.printer.lookup_object('gcode_move')
         original_script = web_request.get_str('script')
+        gcode_move = self.printer.lookup_object('gcode_move', None)
+        if gcode_move is None or not gcode_move.is_printer_ready:
+            # GCodeHelper exists before config loading.  Keep RESTART and
+            # other recovery commands available when motion setup has failed.
+            self.gcode.run_script(original_script)
+            return
         script_lines = original_script.split('\n')
         modified_script = []
 

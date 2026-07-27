@@ -31,6 +31,10 @@ class GCodeMove:
         self.base_position = [0.0, 0.0, 0.0, 0.0]
         self.last_position = [0.0, 0.0, 0.0, 0.0]
         self.homing_position = [0.0, 0.0, 0.0, 0.0]
+        self.e1_offset_position = [0.0, 0.0, 0.0, 0.0]
+        self.active_extruder_offset = [0.0, 0.0, 0.0]
+        self.record_position = [0.0, 0.0, 0.0, 0.0]
+        self.record_state = 1
         self.axis_map = {'X':0, 'Y': 1, 'Z': 2, 'E': 3}
         self.speed = 25.
         self.speed_factor = 1. / 60.
@@ -114,11 +118,24 @@ class GCodeMove:
             'homing_origin': self.Coord(self.homing_position),
             'position': self.Coord(self.last_position),
             'gcode_position': self.Coord(move_position),
+            'offset_position': self.Coord(self.e1_offset_position),
             'axis_map': self.axis_map,
         }
     def reset_last_position(self):
         if self.is_printer_ready:
             self.last_position = self.position_with_transform()
+    def set_active_extruder(self, extruder_name):
+        new_offset = [0., 0., 0.]
+        if extruder_name == 'extruder1':
+            new_offset = list(self.e1_offset_position[:3])
+        delta = [new - old for new, old in zip(
+                 new_offset, self.active_extruder_offset)]
+        # Keep nozzle geometry separate from global G92/SET_GCODE_OFFSET state;
+        # combining them changes the logical print origin after a tool switch.
+        for pos in range(3):
+            self.base_position[pos] += delta[pos]
+        self.active_extruder_offset = new_offset
+        return delta
     def _update_extra_axes(self):
         toolhead = self.printer.lookup_object('toolhead')
         axis_map = {'X':0, 'Y': 1, 'Z': 2, 'E': 3}
@@ -153,6 +170,11 @@ class GCodeMove:
                     else:
                         # value relative to base coordinate position
                         self.last_position[pos] = v + self.base_position[pos]
+                    if axis == 'Z':
+                        # RECORD_GCODE_STATE stores a logical Z so later work
+                        # offset changes are applied exactly once on restore.
+                        self.record_position[2] = (
+                            self.last_position[pos] - self.base_position[pos])
             if 'F' in params:
                 gcode_speed = float(params['F'])
                 if gcode_speed <= 0.:

@@ -5,6 +5,13 @@ DICTIONARY atmega2560.dict
 # Persisted E1 calibration must be available before the first tool change.
 ASSERT_E1_OFFSET_LOADED
 
+# The calibration command must persist both nozzle geometry and the accumulated
+# global Z adjustment using the actual Z endstop section name.
+SET_GCODE_OFFSET Z=0.1
+E_OFFSET_APPLY_ENDSTOP
+ASSERT_E1_OFFSET_PENDING
+SET_GCODE_OFFSET Z=0
+
 # First home the printer
 G90
 G28
@@ -108,7 +115,8 @@ ASSERT_GCODE_Z LOGICAL=198 PHYSICAL=200
 SET_GCODE_OFFSET Z=0
 G1 Z1
 
-# Verify that valid COPY and MIRROR moves use the current carriage offsets.
+# Verify that legacy numeric macros still restore carriage 0 automatically
+# before COPY/MIRROR.  Existing printer profiles depend on this ordering.
 # These positions intentionally permit motion beyond half of the X range.
 G1 X0
 SET_DUAL_CARRIAGE CARRIAGE=1 MODE=PRIMARY

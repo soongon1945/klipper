@@ -292,85 +292,9 @@ class ConfigAutoSave:
                 is_dup_field = True
                 lines[lineno] = '#' + lines[lineno]
         return "\n".join(lines)
-    def _parse_config_buffer(self, buffer, filename, fileconfig):
-        if not buffer:
-            return
-        data = '\n'.join(buffer)
-        del buffer[:]
-        sbuffer = io.StringIO(data)
-        fileconfig.read(sbuffer, filename)
-    def _resolve_include(self, source_filename, include_spec, fileconfig,
-                         visited):
-        dirname = os.path.dirname(source_filename)
-        include_spec = include_spec.strip()
-        include_glob = os.path.join(dirname, include_spec)
-        include_filenames = glob.glob(include_glob)
-        if not include_filenames and not glob.has_magic(include_glob):
-            # Empty set is OK if wildcard but not for direct file reference
-            raise error("Include file '%s' does not exist" % (include_glob,))
-        include_filenames.sort()
-        for include_filename in include_filenames:
-            include_data = self._read_config_file(include_filename)
-            self._parse_config(include_data, include_filename, fileconfig,
-                               visited)
-        return include_filenames
-    def append_fileconfig(self, fileconfig, data, filename):
-        if not data:
-            return
-        # Strip trailing comments
-        lines = data.split('\n')
-        for i, line in enumerate(lines):
-            pos = line.find('#')
-            if pos >= 0:
-                lines[i] = line[:pos]
-        sbuffer = io.StringIO('\n'.join(lines))
-        if sys.version_info.major >= 3:
-            fileconfig.read_file(sbuffer, filename)
-        else:
-            fileconfig.readfp(sbuffer, filename)
-    def _parse_config(self, data, filename, fileconfig, visited):
-        path = os.path.abspath(filename)
-        if path in visited:
-            raise error("Recursive include of config file '%s'" % (filename))
-        visited.add(path)
-        lines = data.split('\n')
-        # Buffer lines between includes and parse as a unit so that overrides
-        # in includes apply linearly as they do within a single file
-        buf = []
-        for line in lines:
-            # Strip trailing comment
-            pos = line.find('#')
-            if pos >= 0:
-                line = line[:pos]
-            # Process include or buffer line
-            mo = configparser.RawConfigParser.SECTCRE.match(line)
-            header = mo and mo.group('header')
-            if header and header.startswith('include '):
-                self.append_fileconfig(fileconfig, '\n'.join(buf), filename)
-                del buf[:]
-                include_spec = header[8:].strip()
-                self._resolve_include(filename, include_spec, fileconfig,
-                                      visited)
-            else:
-                buf.append(line)
-        self.append_fileconfig(fileconfig, '\n'.join(buf), filename)
-        visited.remove(path)
-    def _build_config_wrapper(self, data, filename):
-        if sys.version_info.major >= 3:
-            fileconfig = configparser.RawConfigParser(
-                strict=False, inline_comment_prefixes=(';', '#'))
-        else:
-            fileconfig = configparser.RawConfigParser()
-        self._parse_config(data, filename, fileconfig, set())
-        return ConfigWrapper(self.printer, fileconfig, {}, 'printer')
-    def _build_config_string(self, config):
-        sfile = io.StringIO()
-        config.fileconfig.write(sfile)
-        return sfile.getvalue().strip()
-    def read_config(self, filename):
-        return self._build_config_wrapper(self._read_config_file(filename),
-                                          filename)
-    def read_main_config(self):
+    # PrinterConfig calls this before any other config objects are available.
+    # Keep the upstream API name so merge conflicts cannot block all startup.
+    def load_main_config(self):
         filename = self.printer.get_start_args()['config_file']
         cfgrdr = ConfigFileReader()
         data = cfgrdr.read_config_file(filename)

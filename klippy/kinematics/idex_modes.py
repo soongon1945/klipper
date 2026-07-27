@@ -239,6 +239,7 @@ class DualCarriages:
     cmd_SET_DUAL_CARRIAGE_help = "Configure the dual carriages mode"
     def cmd_SET_DUAL_CARRIAGE(self, gcmd):
         carriage_str = gcmd.get('CARRIAGE', None)
+        legacy_index = None
         if carriage_str is None:
             raise gcmd.error('CARRIAGE must be specified')
         if carriage_str in self.dc_rails:
@@ -250,6 +251,7 @@ class DualCarriages:
                     index = int(carriage_str.strip())
                     if index < 0 or index > 1:
                         raise gcmd.error('Invalid CARRIAGE=%d index' % index)
+                    legacy_index = index
                     dc_rail = (self.dual_rails if index
                                else self.primary_rails)[0]
                 except ValueError:
@@ -260,9 +262,16 @@ class DualCarriages:
         if mode not in self.VALID_MODES:
             raise gcmd.error("Invalid mode=%s specified" % (mode,))
         if mode in [COPY, MIRROR]:
+            legacy_primary = None
             if self.get_primary_rail(dc_rail.axis) in [None, dc_rail.rail]:
-                raise gcmd.error(
-                        "Must activate another carriage as PRIMARY first")
+                if legacy_index == 1:
+                    # Classic IDEX macros selected carriage 1 before COPY or
+                    # MIRROR.  Preserve that public behavior by restoring
+                    # carriage 0 as primary after the axis is proven homed.
+                    legacy_primary = self.primary_rails[0]
+                else:
+                    raise gcmd.error(
+                            "Must activate another carriage as PRIMARY first")
             curtime = self.printer.get_reactor().monotonic()
             kin = self.printer.lookup_object('toolhead').get_kinematics()
             axis = 'xyz'[dc_rail.axis]
@@ -270,6 +279,8 @@ class DualCarriages:
                 raise gcmd.error(
                         "Axis %s must be homed prior to enabling mode=%s" %
                         (axis.upper(), mode))
+            if legacy_primary is not None:
+                self.activate_dc_mode(legacy_primary, PRIMARY)
         if mode == INACTIVE:
             active_dcs = [dc for dc in self.dc_rails.values()
                           if dc.is_active() and dc.axis == dc_rail.axis]

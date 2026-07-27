@@ -65,6 +65,13 @@ class ProbeCommandHelper:
             gcode.register_command('Z_OFFSET_APPLY_PROBE',
                                    self.cmd_Z_OFFSET_APPLY_PROBE,
                                    desc=self.cmd_Z_OFFSET_APPLY_PROBE_help)
+            if self.name == 'probe':
+                # KlipperScreen sends this for probe-based IDEX Z homing.
+                # Only [probe] owns the custom e_* options restored by
+                # manual_probe; other probe types must not save invalid keys.
+                gcode.register_command('E_OFFSET_APPLY_PROBE',
+                                       self.cmd_E_OFFSET_APPLY_PROBE,
+                                       desc=self.cmd_E_OFFSET_APPLY_PROBE_help)
     def _move(self, coord, speed):
         self.printer.lookup_object('toolhead').manual_move(coord, speed)
     def get_status(self, eventtime):
@@ -182,6 +189,27 @@ class ProbeCommandHelper:
             "with the above and restart the printer."
             % (self.name, new_calibrate))
         configfile = self.printer.lookup_object('configfile')
+        configfile.set(self.name, 'z_offset', "%.3f" % (new_calibrate,))
+    cmd_E_OFFSET_APPLY_PROBE_help = "Save secondary nozzle probe offsets"
+    def cmd_E_OFFSET_APPLY_PROBE(self, gcmd):
+        gcode_move = self.printer.lookup_object('gcode_move')
+        offsets = gcode_move.e1_offset_position
+        z_offset = self.probe.get_offsets(gcmd)[2]
+        global_z_offset = offsets[3]
+        new_calibrate = z_offset - global_z_offset
+        gcmd.respond_info(
+            "%s: z_offset: %.3f\n"
+            "%s: e_x_offset: %.3f e_y_offset: %.3f e_z_offset: %.3f\n"
+            "The SAVE_CONFIG command will update the printer config file\n"
+            "with the above and restart the printer." % (
+                self.name, new_calibrate, self.name,
+                offsets[0], offsets[1], offsets[2]))
+        configfile = self.printer.lookup_object('configfile')
+        configfile.set(self.name, 'e_x_offset', "%.3f" % (offsets[0],))
+        configfile.set(self.name, 'e_y_offset', "%.3f" % (offsets[1],))
+        configfile.set(self.name, 'e_z_offset', "%.3f" % (offsets[2],))
+        # SET_GCODE_OFFSET Z belongs in the probe's calibrated trigger
+        # distance on virtual-endstop machines, not a missing endstop.
         configfile.set(self.name, 'z_offset', "%.3f" % (new_calibrate,))
 
 # Helper to lookup the minimum Z position for the printer
@@ -629,4 +657,3 @@ class PrinterProbe:
 
 def load_config(config):
     return PrinterProbe(config)
-
