@@ -3,7 +3,7 @@
 # Copyright (C) 2018  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import sys, os, optparse, logging, subprocess
+import sys, os, optparse, logging, subprocess, io
 
 TEMP_GCODE_FILE = "_test_.gcode"
 TEMP_LOG_FILE = "_test_.log"
@@ -36,6 +36,7 @@ class TestCase:
         # Parse file into test cases
         config_fname = gcode_fname = dict_fnames = None
         should_fail = multi_tests = False
+        expected_error = None
         gcode = []
         f = open(self.fname, 'r')
         for line in f:
@@ -51,11 +52,13 @@ class TestCase:
                     if not multi_tests:
                         multi_tests = True
                         self.launch_test(config_fname, dict_fnames,
-                                         gcode_fname, gcode, should_fail)
+                                         gcode_fname, gcode, should_fail,
+                                         expected_error)
                 config_fname = self.relpath(parts[1])
                 if multi_tests:
                     self.launch_test(config_fname, dict_fnames,
-                                     gcode_fname, gcode, should_fail)
+                                     gcode_fname, gcode, should_fail,
+                                     expected_error)
             elif parts[0] == "DICTIONARY":
                 dict_fnames = [self.relpath(parts[1], 'dict')]
                 for mcu_dict in parts[2:]:
@@ -66,14 +69,21 @@ class TestCase:
                 gcode_fname = self.relpath(parts[1])
             elif parts[0] == "SHOULD_FAIL":
                 should_fail = True
+            elif parts[0] == "EXPECTED_ERROR":
+                expected_error = line.strip()[len("EXPECTED_ERROR"):].strip()
+                if not expected_error:
+                    raise error("EXPECTED_ERROR requires matching log text")
+                # Require both a Klippy failure and its intended error text so
+                # an unrelated config or startup error cannot pass the test.
+                should_fail = True
             else:
                 gcode.append(line.strip())
         f.close()
         if not multi_tests:
             self.launch_test(config_fname, dict_fnames,
-                             gcode_fname, gcode, should_fail)
+                             gcode_fname, gcode, should_fail, expected_error)
     def launch_test(self, config_fname, dict_fnames, gcode_fname, gcode,
-                    should_fail):
+                    should_fail, expected_error):
         gcode_is_temp = False
         if gcode_fname is None:
             gcode_fname = self.relpath(TEMP_GCODE_FILE, 'temp')
@@ -94,23 +104,36 @@ class TestCase:
                  '-i', gcode_fname, '-o', TEMP_OUTPUT_FILE, '-v' ]
         for df in dict_fnames:
             args += ['-d', df]
-        if not self.verbose:
+        use_log = not self.verbose or expected_error is not None
+        if use_log:
+            if os.path.exists(TEMP_LOG_FILE):
+                os.unlink(TEMP_LOG_FILE)
             args += ['-l', TEMP_LOG_FILE]
         res = subprocess.call(args)
         is_fail = (should_fail and not res) or (not should_fail and res)
         if is_fail:
-            if not self.verbose:
+            if use_log:
                 self.show_log()
             if should_fail:
                 raise error("Test failed to raise an error")
             raise error("Error during test")
+        if expected_error is not None:
+            if not os.path.exists(TEMP_LOG_FILE):
+                raise error("Klippy did not create a log for EXPECTED_ERROR")
+            with io.open(TEMP_LOG_FILE, 'r', encoding='utf-8',
+                         errors='replace') as f:
+                log_data = f.read()
+            if expected_error not in log_data:
+                self.show_log()
+                raise error("Test raised an unexpected error; expected: %s"
+                            % (expected_error,))
         # Do cleanup
         if self.keepfiles:
             return
         for fname in os.listdir(self.tempdir):
             if fname.startswith(TEMP_OUTPUT_FILE):
                 os.unlink(fname)
-        if not self.verbose:
+        if use_log:
             os.unlink(TEMP_LOG_FILE)
         else:
             sys.stderr.write('\n')
@@ -126,10 +149,10 @@ class TestCase:
             return "internal error"
         return "success"
     def show_log(self):
-        f = open(TEMP_LOG_FILE, 'r')
-        data = f.read()
-        f.close()
-        sys.stdout.write(data)
+        if os.path.exists(TEMP_LOG_FILE):
+            with io.open(TEMP_LOG_FILE, 'r', encoding='utf-8',
+                         errors='replace') as f:
+                sys.stdout.write(f.read())
 
 
 ######################################################################

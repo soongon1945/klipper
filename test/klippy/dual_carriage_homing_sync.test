@@ -1,0 +1,25 @@
+# Homing from T1 must finish on a fully synchronized T0 and preserve G91.
+CONFIG dual_carriage_homing_sync.cfg
+DICTIONARY atmega2560.dict
+
+G90
+G28
+T1
+# Reproduce the shared COPY/MIRROR E queue that G28 must unwind.
+SYNC_EXTRUDER_MOTION EXTRUDER=extruder1 MOTION_QUEUE=extruder
+G91
+G28 X
+ASSERT_IDEX_TOOL CARRIAGE=0 EXTRUDER=extruder
+ASSERT_GCODE_MODE ABSOLUTE=0
+ASSERT_GCODE_X EXPECTED=0
+G1 X10
+
+# Repeat from T1 in G90 so the wrapper is verified in both coordinate modes.
+G90
+T1
+SYNC_EXTRUDER_MOTION EXTRUDER=extruder1 MOTION_QUEUE=extruder
+G28 X
+ASSERT_IDEX_TOOL CARRIAGE=0 EXTRUDER=extruder
+ASSERT_GCODE_MODE ABSOLUTE=1
+ASSERT_GCODE_X EXPECTED=0
+G1 X10

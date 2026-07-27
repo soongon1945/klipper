@@ -1,0 +1,9 @@
+# G28 must reapply safe_distance after it restores carriage 0 as PRIMARY.
+# dual_carriage.test proves the otherwise identical X160 move succeeds.
+CONFIG dual_carriage.cfg
+DICTIONARY atmega2560.dict
+EXPECTED_ERROR Move out of range: 161.000
+
+G90
+G28
+G1 X161

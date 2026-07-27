@@ -2,9 +2,20 @@
 CONFIG dual_carriage.cfg
 DICTIONARY atmega2560.dict
 
+# Persisted E1 calibration must be available before the first tool change.
+ASSERT_E1_OFFSET_LOADED
+
 # First home the printer
 G90
 G28
+
+# The same setup is used by the paired out-of-bounds tests.  X160 is the last
+# valid T0 coordinate when T1 is parked at X200 with safe_distance=40.
+G1 X160
+SAVE_DUAL_CARRIAGE_STATE NAME=safe_restore
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=PRIMARY
+RESTORE_DUAL_CARRIAGE_STATE NAME=safe_restore MOVE=0
+G1 X160
 
 # Perform a dummy move
 G1 X10 F6000
@@ -36,10 +47,14 @@ RESTORE_DUAL_CARRIAGE_STATE
 
 # Test changing extruders
 G1 X5
+SYNC_EXTRUDER_MOTION EXTRUDER=extruder1 MOTION_QUEUE=extruder
 T1
+ASSERT_IDEX_TOOL CARRIAGE=1 EXTRUDER=extruder1
 G91
 G1 X-10 E.2
+SYNC_EXTRUDER_MOTION EXTRUDER=extruder1 MOTION_QUEUE=extruder
 T0
+ASSERT_IDEX_TOOL CARRIAGE=0 EXTRUDER=extruder
 G91
 G1 X20 E.2
 G90
@@ -69,14 +84,29 @@ SET_DUAL_CARRIAGE CARRIAGE=0 MODE=PRIMARY
 G1 X0
 SET_GCODE_EOFFSET X=0
 
-# RECORD_GCODE_STATE stores an absolute Z target and must restore G91 after
-# moving.  Without the G90 guard this attempts a relative move from Z150 to
-# Z300, beyond the fixture's Z range.
-G1 Z150
+# A relative Z move must update the recorded logical target.  The old path kept
+# Z1, moved back to it, then made the following relative move cross Z minimum.
+G1 Z1
 RECORD_GCODE_STATE
 G91
+G1 Z1
 RECORD_GCODE_STATE MOVE=1
+ASSERT_GCODE_MODE ABSOLUTE=0
+G1 Z-1.5
 G90
+
+# Store logical Z, apply the current offset exactly once during restore, and do
+# not leak the internal 1000mm/min tool-change speed into the print's F value.
+G1 Z199
+SET_GCODE_OFFSET Z=1
+RECORD_GCODE_STATE
+SET_GCODE_OFFSET Z=2
+G1 F1234
+RECORD_GCODE_STATE MOVE=1
+ASSERT_GCODE_SPEED EXPECTED=1234
+ASSERT_GCODE_Z LOGICAL=198 PHYSICAL=200
+SET_GCODE_OFFSET Z=0
+G1 Z1
 
 # Verify that valid COPY and MIRROR moves use the current carriage offsets.
 # These positions intentionally permit motion beyond half of the X range.

@@ -75,8 +75,9 @@ class DualCarriages:
         for i, dc_rail in enumerated_dcs:
             self.toggle_active_dc_rail(i)
             kin.home_axis(homing_state, self.axis, dc_rail.get_rail())
-        # Restore the original rails ordering
-        self.toggle_active_dc_rail(0)
+        # Re-enter PRIMARY through the mode path so safe_distance is restored;
+        # a raw rail toggle leaves the full mechanical range exposed after G28.
+        self.activate_dc_mode(0, PRIMARY)
     def get_status(self, eventtime=None):
         return {('carriage_%d' % (i,)) : dc.mode
                 for (i, dc) in enumerate(self.dc)}
@@ -161,7 +162,13 @@ class DualCarriages:
         else:
             self.toggle_active_dc_rail(0)
             self.dc[index].activate(mode, toolhead.get_position())
-        kin.update_limits(self.axis, self.get_kin_range(toolhead, mode))
+        limit_mode = mode
+        if mode == INACTIVE and self.get_primary_rail() is not None:
+            # RESTORE applies an INACTIVE secondary after its PRIMARY rail.
+            # Keep limits based on that remaining primary carriage instead of
+            # replacing its collision-safe range with a bare rail range.
+            limit_mode = PRIMARY
+        kin.update_limits(self.axis, self.get_kin_range(toolhead, limit_mode))
     def _handle_ready(self):
         # Apply the transform later during Klipper initialization to make sure
         # that input shaping can pick up the correct stepper kinematic flags.

@@ -2,7 +2,7 @@
 # the configured safe_distance while both rails remain in mechanical range.
 CONFIG dual_carriage.cfg
 DICTIONARY atmega2560.dict
-SHOULD_FAIL
+EXPECTED_ERROR Move out of range: 81.000
 
 G90
 G28

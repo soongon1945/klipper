@@ -1,0 +1,13 @@
+# Restoring [PRIMARY, INACTIVE] must retain the primary carriage's safe range.
+# dual_carriage.test proves the otherwise identical X160 move succeeds.
+CONFIG dual_carriage.cfg
+DICTIONARY atmega2560.dict
+EXPECTED_ERROR Move out of range: 161.000
+
+G90
+G28
+G1 X160
+SAVE_DUAL_CARRIAGE_STATE NAME=safe_restore
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=PRIMARY
+RESTORE_DUAL_CARRIAGE_STATE NAME=safe_restore MOVE=0
+G1 X161

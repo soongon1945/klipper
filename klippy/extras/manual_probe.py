@@ -11,6 +11,15 @@ class ManualProbe:
         # Register commands
         self.gcode = self.printer.lookup_object('gcode')
         self.gcode_move = self.printer.load_object(config, "gcode_move")
+        if config.has_section('probe'):
+            probe_config = config.getsection('probe')
+            # E1 calibration is written to [probe] by SAVE_CONFIG.  Restore it
+            # before tool activation so a restart does not discard alignment.
+            self.gcode_move.e1_offset_position[:3] = [
+                probe_config.getfloat('e_x_offset', 0.),
+                probe_config.getfloat('e_y_offset', 0.),
+                probe_config.getfloat('e_z_offset', 0.),
+            ]
         self.bed_mesh_bak = self.printer.load_object(config, "bed_mesh")
         self.gcode.register_command('MANUAL_PROBE', self.cmd_MANUAL_PROBE,
                                     desc=self.cmd_MANUAL_PROBE_help)

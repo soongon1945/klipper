@@ -145,8 +145,11 @@ class GCodeMove:
                     else:
                         # value relative to base coordinate position
                         self.last_position[pos] = v + self.base_position[pos]
-                        if axis == 'Z':
-                            self.record_position[2] = v
+                    if axis == 'Z':
+                        # Keep the tool-change target in logical G-Code space
+                        # for both G90 and G91 moves so offsets apply once.
+                        self.record_position[2] = (
+                            self.last_position[2] - self.base_position[2])
             if 'E' in params:
                 v = float(params['E']) * self.extrude_factor
                 if not self.absolute_coord or not self.absolute_extrude:
@@ -305,26 +308,20 @@ class GCodeMove:
             self.move_with_transform(self.last_position, speed)
     cmd_RECORD_GCODE_STATE_help = "Record or restore a tool-change Z position"
     def cmd_RECORD_GCODE_STATE(self, gcmd):
-        gcode = self.printer.lookup_object('gcode')
         record_state = gcmd.get_int('MOVE', 0)
         if record_state:
             self.record_state = record_state
-            # RECORD_GCODE_STATE stores an absolute Z target.  Force G90 for
-            # the move and restore G91 afterwards so relative print jobs do
-            # not turn that target into an unsafe additional Z displacement.
-            restore_relative = not self.absolute_coord
-            if restore_relative:
-                gcode.run_script_from_command("G90")
-            try:
-                gcode.run_script_from_command(
-                    "G1 F1000 Z%.4f" % (self.record_position[2]))
-            finally:
-                if restore_relative:
-                    gcode.run_script_from_command("G91")
+            # Move in physical space without issuing G90/G91 or G1.  A script
+            # here used to leak F1000 into the print and could double-apply a
+            # changed SET_GCODE_OFFSET to the recorded logical Z coordinate.
+            target = list(self.last_position)
+            target[2] = self.record_position[2] + self.base_position[2]
+            self.last_position = target
+            self.move_with_transform(target, 1000. * self.speed_factor)
         else:
             if self.record_state == record_state:
                 return
-            self.record_position[2] = self.last_position[2]
+            self.record_position[2] = self._get_gcode_position()[2]
     cmd_GET_POSITION_help = (
         "Return information on the current location of the toolhead")
     def cmd_GET_POSITION(self, gcmd):

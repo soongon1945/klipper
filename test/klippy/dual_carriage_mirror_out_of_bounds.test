@@ -2,7 +2,7 @@
 # safe_distance=0 disables their proximity check.
 CONFIG dual_carriage_no_safe_distance.cfg
 DICTIONARY atmega2560.dict
-SHOULD_FAIL
+EXPECTED_ERROR Move out of range: 151.000
 
 G90
 G28
