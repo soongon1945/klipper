@@ -415,20 +415,32 @@ class ShaperCalibrate:
                     break
         return best_shaper, all_shapers
 
+    def _get_save_section(self):
+        # Without dual carriages the shaper is applied straight from
+        # [input_shaper], so that is where the calibration belongs.
+        if self.printer.lookup_object('dual_carriage', None) is None:
+            return 'input_shaper'
+        # With dual carriages each carriage needs its own X shaper, which a
+        # single [input_shaper] section cannot express.  input_shaper.py
+        # therefore refuses to start when that section carries parameters, so
+        # saving there would leave the printer unbootable after SAVE_CONFIG.
+        # Store one section per tool instead; the printer config is expected
+        # to replay them with SET_INPUT_SHAPER after selecting each carriage.
+        # These sections are deliberately not backed by a module - they are
+        # data read back via printer.configfile.config.
+        name = self.printer.lookup_object('toolhead').get_extruder().get_name()
+        # Extruders are named 'extruder' (tool 0) or 'extruder<N>'.
+        suffix = name[len('extruder'):] if name.startswith('extruder') else ''
+        return 'input_shaper' + (suffix or '0')
+
     def save_params(self, configfile, axis, shaper_name, shaper_freq):
         if axis == 'xy':
             self.save_params(configfile, 'x', shaper_name, shaper_freq)
             self.save_params(configfile, 'y', shaper_name, shaper_freq)
-        else:
-            toolhead = self.printer.lookup_object('toolhead')
-            if toolhead.get_extruder().get_name() == 'extruder':
-                configfile.set('input_shaper', 'shaper_type_'+axis, shaper_name)
-                configfile.set('input_shaper', 'shaper_freq_'+axis,
-                            '%.1f' % (shaper_freq,))
-            elif toolhead.get_extruder().get_name() == 'extruder1':
-                configfile.set('input_shaper1', 'shaper_type_'+axis, shaper_name)
-                configfile.set('input_shaper1', 'shaper_freq_'+axis,
-                            '%.1f' % (shaper_freq,))
+            return
+        section = self._get_save_section()
+        configfile.set(section, 'shaper_type_' + axis, shaper_name)
+        configfile.set(section, 'shaper_freq_' + axis, '%.1f' % (shaper_freq,))
 
     def apply_params(self, input_shaper, axis, shaper_name, shaper_freq):
         if axis == 'xy':
