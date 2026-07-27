@@ -97,7 +97,7 @@ class AngleCalibration:
                 return None
         return self.mcu_stepper.mcu_to_commanded_position(self.mcu_pos_offset)
     def load_calibration(self, angles):
-        # Calculate linear intepolation calibration buckets by solving
+        # Calculate linear interpolation calibration buckets by solving
         # linear equations
         angle_max = 1 << ANGLE_BITS
         calibration_count = 1 << CALIBRATION_BITS
@@ -595,7 +595,7 @@ class HelperMT6826S:
             gcmd.respond_info("AUTOCAL_FREQ = %i" % (val >> 4 & 0x7))
         elif reg == 0x113:
             val = self._read_reg(reg)
-            gcmd.respond_info("Status: %s" % (self.cal_status[val >> 6]))
+            gcmd.respond_info("Status: %s" % (self.status_map[val >> 6]))
         else:
             val = self._read_reg(reg)
             gcmd.respond_info("REG[0x%04x] = 0x%02x" % (reg, val))

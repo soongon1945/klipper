@@ -16,8 +16,6 @@ DEFAULT_ERROR_GCODE = """
 class VirtualSD:
     def __init__(self, config):
         self.printer = config.get_printer()
-        self.printer.register_event_handler("klippy:shutdown",
-                                            self.handle_shutdown)
         # sdcard state
         sd = config.get('path')
         self.sdcard_dirname = os.path.normpath(os.path.expanduser(sd))
@@ -49,10 +47,9 @@ class VirtualSD:
         self.gcode.register_command(
             "SDCARD_PRINT_FILE", self.cmd_SDCARD_PRINT_FILE,
             desc=self.cmd_SDCARD_PRINT_FILE_help)
-        self.gcode.register_command(
-            "ALLOW_INTERRUPT", self.cmd_ALLOW_INTERRUPT,
-            desc=self.cmd_ALLOW_INTERRUPT_help)
-    def handle_shutdown(self):
+        self.printer.register_event_handler("klippy:analyze_shutdown",
+                                            self._handle_analyze_shutdown)
+    def _handle_analyze_shutdown(self, msg, details):
         if self.work_timer is not None:
             self.must_pause_work = True
             try:
@@ -286,7 +283,7 @@ class VirtualSD:
                 continue
             # Pause if any other request is pending in the gcode class
             if gcode_mutex.test():
-                self.reactor.pause(self.reactor.monotonic() + 0.100)
+                self.reactor.pause(self.reactor.monotonic() + 0.050)
                 continue
             # Dispatch command
             self.cmd_from_sd = True
