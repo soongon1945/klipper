@@ -2,6 +2,9 @@
 CONFIG bed_mesh.cfg
 DICTIONARY atmega2560.dict
 
+# Status initialization must expose ProbeManager's generated points.
+ASSERT_BED_MESH_POINTS
+
 # Start by homing the printer.
 G28
 G1 F6000

@@ -237,7 +237,9 @@ class BedMesh:
             "mesh_max": (0., 0.),
             "probed_matrix": [[]],
             "mesh_matrix": [[]],
-            "bmc_points": self.bmc.points,
+            # ProbeManager owns generated points after the rapid-scan
+            # refactor; KlipperScreen still consumes them via bmc_points.
+            "bmc_points": self.bmc.probe_mgr.get_base_points(),
             "profiles": self.pmgr.get_profiles()
         }
         if self.z_mesh is not None:
