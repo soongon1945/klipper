@@ -222,6 +222,9 @@ class ToolHead:
         self.max_velocity = config.getfloat('max_velocity', above=0.)
         self.max_velocity_buf = self.max_velocity
         self.max_accel = config.getfloat('max_accel', above=0.)
+        # Keep the configured ceiling available after runtime limit changes;
+        # SET_VELOCITY_LIMIT and M204 must never raise acceleration above it.
+        self.max_accel_buf = self.max_accel
         min_cruise_ratio = 0.5
         if config.getfloat('minimum_cruise_ratio', None) is None:
             req_accel_to_decel = config.getfloat('max_accel_to_decel', None,
@@ -486,6 +489,21 @@ class ToolHead:
         self.lookahead.add_move(move)
         if self.print_time > self.need_check_pause:
             self._check_pause()
+    def set_xyzmax_error(self, mark, curpos, endpos):
+        # G-code dimension metadata is parsed before motion.  Defer its error
+        # to the next kinematic move so it follows the normal move-error path.
+        self.xyzmax_error = mark
+        self.xyzmax_pos = curpos
+        self.xyzmax_limit = endpos
+    def check_xyzmax(self):
+        if self.xyzmax_error:
+            # Clear the deferred marker before raising so a handled error does
+            # not poison every later move in the same printer session.
+            self.xyzmax_error = False
+            msg = "Move out of range"
+            m = "%s: %.3f [%.3f]" % (
+                msg, self.xyzmax_pos, self.xyzmax_limit)
+            raise self.printer.command_error(m)
     def manual_move(self, coord, speed):
         curpos = list(self.commanded_pos)
         for i in range(len(coord)):

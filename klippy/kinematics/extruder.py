@@ -276,19 +276,14 @@ class PrinterExtruder:
     cmd_ACTIVATE_EXTRUDER_help = "Change the active extruder"
     def cmd_ACTIVATE_EXTRUDER(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')
-        if self.name == 'extruder':
-            for pos, axis in enumerate('XYZ'):
-                self.gcode_move.base_position[pos] = 0 + self.gcode_move.e1_offset_position[3]
-                self.gcode_move.homing_position[pos] = 0 + self.gcode_move.e1_offset_position[3]
-        elif self.name == 'extruder1':
-            for pos, axis in enumerate('XYZ'):
-                self.gcode_move.base_position[pos] = self.gcode_move.e1_offset_position[pos] + self.gcode_move.e1_offset_position[3]
-                self.gcode_move.homing_position[pos] = self.gcode_move.e1_offset_position[pos] + self.gcode_move.e1_offset_position[3]
         if toolhead.get_extruder() is self:
             gcmd.respond_info("Extruder %s already active" % (self.name,))
             return
         gcmd.respond_info("Activating extruder %s" % (self.name,))
         toolhead.flush_step_generation()
+        # Shift only by the nozzle-to-nozzle delta.  Replacing the complete
+        # origin here would discard G92 and saved G-code coordinate state.
+        self.gcode_move.set_active_extruder(self.name)
         toolhead.set_extruder(self, self.last_position)
         self.printer.send_event("extruder:activate_extruder")
 

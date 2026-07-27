@@ -44,6 +44,7 @@ class GCodeMove:
         self.last_position = [0.0, 0.0, 0.0, 0.0]
         self.homing_position = [0.0, 0.0, 0.0, 0.0]
         self.e1_offset_position = [0.0, 0.0, 0.0, 0.0]
+        self.active_extruder_offset = [0.0, 0.0, 0.0]
         self.record_position = [0.0, 0.0, 0.0, 0.0]
         self.record_state = 1
         self.speed = 25.
@@ -78,7 +79,10 @@ class GCodeMove:
     def _handle_home_rails_end(self, homing_state, rails):
         self.reset_last_position()
         for axis in homing_state.get_axes():
-            self.base_position[axis] = self.homing_position[axis]
+            # Homing resets G92 state, but the active nozzle remains selected.
+            # Preserve its geometric offset in the new physical-to-G-code map.
+            self.base_position[axis] = (self.homing_position[axis]
+                                        + self.active_extruder_offset[axis])
     def set_move_transform(self, transform, force=False):
         if self.move_transform is not None and not force:
             raise self.printer.config_error(
@@ -114,6 +118,19 @@ class GCodeMove:
     def reset_last_position(self):
         if self.is_printer_ready:
             self.last_position = self.position_with_transform()
+    def set_active_extruder(self, extruder_name):
+        new_offset = [0., 0., 0.]
+        if extruder_name == 'extruder1':
+            new_offset = list(self.e1_offset_position[:3])
+        delta = [new - old for new, old in zip(
+                 new_offset, self.active_extruder_offset)]
+        # Keep the nozzle delta separate from homing_position, which tracks
+        # SET_GCODE_OFFSET.  Mixing them makes a global offset on T1 corrupt
+        # the coordinate origin when switching back to T0.
+        for pos in range(3):
+            self.base_position[pos] += delta[pos]
+        self.active_extruder_offset = new_offset
+        return delta
     # G-Code movement commands
     def cmd_G1(self, gcmd):
         # Move
@@ -218,25 +235,19 @@ class GCodeMove:
     cmd_SET_GCODE_EOFFSET_help = "Set a virtual E1 offset to g-code positions"
     def cmd_SET_GCODE_EOFFSET(self, gcmd):
         move_delta = [0., 0., 0., 0.]
-        for pos, axis in enumerate('XYZE'):
+        for pos, axis in enumerate('XYZ'):
             offset = gcmd.get_float(axis, None)
             if offset is None:
                 offset = gcmd.get_float(axis + '_ADJUST', None)
                 if offset is None:
                     continue
-                offset += self.homing_position[pos]
-            delta = offset - self.homing_position[pos]
-            move_delta[pos] = delta
-            self.e1_offset_position[pos] += delta
+                offset += self.e1_offset_position[pos]
+            self.e1_offset_position[pos] = offset
         toolhead = self.printer.lookup_object('toolhead')
-        if toolhead.get_extruder().get_name() == 'extruder':
-            for pos, axis in enumerate('XYZ'):
-                self.base_position[pos] = 0 + self.e1_offset_position[3]
-                self.homing_position[pos] = 0 + self.e1_offset_position[3]
-        elif toolhead.get_extruder().get_name() == 'extruder1':
-            for pos, axis in enumerate('XYZ'):
-                self.base_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
-                self.homing_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
+        if toolhead.get_extruder().get_name() == 'extruder1':
+            # Offset calibration affects the active nozzle immediately, but
+            # must not move T0 while the inactive T1 offset is being edited.
+            move_delta[:3] = self.set_active_extruder('extruder1')
         # Move the toolhead the given offset if requested
         if gcmd.get_int('MOVE', 0):
             speed = gcmd.get_float('MOVE_SPEED', self.speed, above=0.)
@@ -252,6 +263,7 @@ class GCodeMove:
             'base_position': list(self.base_position),
             'last_position': list(self.last_position),
             'homing_position': list(self.homing_position),
+            'active_extruder_offset': list(self.active_extruder_offset),
             'speed': self.speed, 'speed_factor': self.speed_factor,
             'extrude_factor': self.extrude_factor,
         }
@@ -266,15 +278,12 @@ class GCodeMove:
         self.absolute_extrude = state['absolute_extrude']
         self.base_position = list(state['base_position'])
         self.homing_position = list(state['homing_position'])
-        toolhead = self.printer.lookup_object('toolhead')
-        if toolhead.get_extruder().get_name() == 'extruder':
-            for pos, axis in enumerate('XYZ'):
-                self.base_position[pos] = 0 + self.e1_offset_position[3]
-                self.homing_position[pos] = 0 + self.e1_offset_position[3]
-        elif toolhead.get_extruder().get_name() == 'extruder1':
-            for pos, axis in enumerate('XYZ'):
-                self.base_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
-                self.homing_position[pos] = self.e1_offset_position[pos] + self.e1_offset_position[3]
+        saved_offset = state.get('active_extruder_offset', [0., 0., 0.])
+        # A tool may change after SAVE_GCODE_STATE.  Restore the saved logical
+        # origin, then translate only the motion basis by the nozzle delta.
+        for pos in range(3):
+            delta = self.active_extruder_offset[pos] - saved_offset[pos]
+            self.base_position[pos] += delta
         self.speed = state['speed']
         self.speed_factor = state['speed_factor']
         self.extrude_factor = state['extrude_factor']
@@ -294,13 +303,24 @@ class GCodeMove:
                 self.last_position[pos] = (saved_gcode_pos
                                            + self.base_position[pos])
             self.move_with_transform(self.last_position, speed)
-    cmd_RECORD_GCODE_STATE_help = "Restore a previously saved G-Code state"
+    cmd_RECORD_GCODE_STATE_help = "Record or restore a tool-change Z position"
     def cmd_RECORD_GCODE_STATE(self, gcmd):
         gcode = self.printer.lookup_object('gcode')
         record_state = gcmd.get_int('MOVE', 0)
         if record_state:
             self.record_state = record_state
-            gcode.run_script_from_command("G1 F1000 Z%.4f" % (self.record_position[2]))
+            # RECORD_GCODE_STATE stores an absolute Z target.  Force G90 for
+            # the move and restore G91 afterwards so relative print jobs do
+            # not turn that target into an unsafe additional Z displacement.
+            restore_relative = not self.absolute_coord
+            if restore_relative:
+                gcode.run_script_from_command("G90")
+            try:
+                gcode.run_script_from_command(
+                    "G1 F1000 Z%.4f" % (self.record_position[2]))
+            finally:
+                if restore_relative:
+                    gcode.run_script_from_command("G91")
         else:
             if self.record_state == record_state:
                 return

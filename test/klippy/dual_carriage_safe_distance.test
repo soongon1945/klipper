@@ -1,0 +1,13 @@
+# MIRROR mode must reject a move that would reduce carriage separation below
+# the configured safe_distance while both rails remain in mechanical range.
+CONFIG dual_carriage.cfg
+DICTIONARY atmega2560.dict
+SHOULD_FAIL
+
+G90
+G28
+G1 X0
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=PRIMARY
+G1 X200
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=MIRROR
+G1 X81

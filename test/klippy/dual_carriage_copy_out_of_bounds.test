@@ -1,0 +1,13 @@
+# COPY mode must obey both carriages' mechanical travel limits even when
+# safe_distance=0 disables their proximity check.
+CONFIG dual_carriage_no_safe_distance.cfg
+DICTIONARY atmega2560.dict
+SHOULD_FAIL
+
+G90
+G28
+G1 X0
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=PRIMARY
+G1 X100
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=COPY
+G1 X101

@@ -9,6 +9,11 @@ G28
 # Perform a dummy move
 G1 X10 F6000
 
+# Runtime acceleration requests must clamp to the configured ceiling instead
+# of failing because the merge dropped the cached maximum.
+SET_VELOCITY_LIMIT ACCEL=4000
+M204 S4000
+
 # Activate alternate carriage
 SET_DUAL_CARRIAGE CARRIAGE=1
 G1 X190 F6000
@@ -38,6 +43,55 @@ T0
 G91
 G1 X20 E.2
 G90
+
+# A global Z offset and a redundant activation must not leak into the X/Y
+# origin.  The old implementation changed Y180 into a physical Y230 move.
+SET_GCODE_OFFSET Z=50
+ACTIVATE_EXTRUDER EXTRUDER=extruder
+SAVE_GCODE_STATE NAME=global_z_offset
+RESTORE_GCODE_STATE NAME=global_z_offset
+G1 Y180
+SET_GCODE_OFFSET Z=0
+G1 Y0
+
+# Editing an inactive T1 offset must not move the active T0 carriage.
+SET_GCODE_EOFFSET X=1000 MOVE=1
+SET_GCODE_EOFFSET X=0
+
+# Keep SET_GCODE_OFFSET independent from the active nozzle offset.  Combining
+# both origins makes the next T0 move use an invalid negative X coordinate.
+SET_GCODE_EOFFSET X=50
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=PRIMARY
+ACTIVATE_EXTRUDER EXTRUDER=extruder1
+SET_GCODE_OFFSET X=0
+ACTIVATE_EXTRUDER EXTRUDER=extruder
+SET_DUAL_CARRIAGE CARRIAGE=0 MODE=PRIMARY
+G1 X0
+SET_GCODE_EOFFSET X=0
+
+# RECORD_GCODE_STATE stores an absolute Z target and must restore G91 after
+# moving.  Without the G90 guard this attempts a relative move from Z150 to
+# Z300, beyond the fixture's Z range.
+G1 Z150
+RECORD_GCODE_STATE
+G91
+RECORD_GCODE_STATE MOVE=1
+G90
+
+# Verify that valid COPY and MIRROR moves use the current carriage offsets.
+# These positions intentionally permit motion beyond half of the X range.
+G1 X0
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=PRIMARY
+G1 X80
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=COPY
+G1 X110
+SET_DUAL_CARRIAGE CARRIAGE=0 MODE=PRIMARY
+G1 X60
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=PRIMARY
+G1 X200
+SET_DUAL_CARRIAGE CARRIAGE=1 MODE=MIRROR
+G1 X105
+SET_DUAL_CARRIAGE CARRIAGE=0 MODE=PRIMARY
 
 # Restore a saved T0 position after switching to an offset T1.  The restore
 # move must absorb the nozzle offset before extrusion resumes; otherwise the

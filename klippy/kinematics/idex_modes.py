@@ -92,30 +92,28 @@ class DualCarriages:
             range_min = dc1_rail.position_min
             range_max = dc1_rail.position_max
         safe_dist = self.safe_dist
-        if not safe_dist:
-            return (range_min, range_max)
-
         if mode == COPY:
+            # A zero safe_distance disables only carriage proximity checks;
+            # both rail travel limits must still protect the hardware.
             range_min = max(range_min,
                             axes_pos[0] - axes_pos[1] + dc1_rail.position_min)
             range_max = min(range_max,
                             axes_pos[0] - axes_pos[1] + dc1_rail.position_max)
-            range_min = dc0_rail.position_min
-            range_max = dc0_rail.position_max * 0.5
         elif mode == MIRROR:
-            if self.get_dc_order(0, 1) > 0:
+            # MIRROR limits depend on the current carriage offset.  Keep the
+            # calculated range instead of replacing it with a fixed half-bed.
+            axes_sum = sum(axes_pos)
+            range_min = max(range_min,
+                            axes_sum - dc1_rail.position_max)
+            range_max = min(range_max,
+                            axes_sum - dc1_rail.position_min)
+            if safe_dist and self.get_dc_order(0, 1) > 0:
                 range_min = max(range_min,
-                                0.5 * (sum(axes_pos) + safe_dist))
+                                0.5 * (axes_sum + safe_dist))
+            elif safe_dist:
                 range_max = min(range_max,
-                                sum(axes_pos) - dc1_rail.position_min)
-            else:
-                range_max = min(range_max,
-                                0.5 * (sum(axes_pos) - safe_dist))
-                range_min = max(range_min,
-                                sum(axes_pos) - dc1_rail.position_max)
-            range_min = dc0_rail.position_min
-            range_max = dc0_rail.position_max * 0.5
-        else:
+                                0.5 * (axes_sum - safe_dist))
+        elif mode == PRIMARY and safe_dist:
             # mode == PRIMARY
             active_idx = 1 if self.dc[1].is_active() else 0
             inactive_idx = 1 - active_idx
