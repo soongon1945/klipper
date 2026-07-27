@@ -70,7 +70,7 @@ SECTIONS
         *(.init)
         *(.fini)
 
-        // Klipper does not use C++ exception stack unwinding.
+        // Don't include exception tables
         *(.ARM.extab)
         *(.ARM.exidx)
     }
