@@ -47,6 +47,12 @@ class VirtualSD:
         self.gcode.register_command(
             "SDCARD_PRINT_FILE", self.cmd_SDCARD_PRINT_FILE,
             desc=self.cmd_SDCARD_PRINT_FILE_help)
+        # Power-loss recovery only consumes the stored byte position after
+        # this explicit opt-in; losing the command makes interrupted prints
+        # silently restart from the beginning instead of resuming.
+        self.gcode.register_command(
+            "ALLOW_INTERRUPT", self.cmd_ALLOW_INTERRUPT,
+            desc=self.cmd_ALLOW_INTERRUPT_help)
         self.printer.register_event_handler("klippy:analyze_shutdown",
                                             self._handle_analyze_shutdown)
     def _handle_analyze_shutdown(self, msg, details):
