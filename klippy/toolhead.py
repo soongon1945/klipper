@@ -192,7 +192,11 @@ class LookAheadQueue:
         # Check if enough moves have been queued to reach the target flush time.
         return self.junction_flush <= 0.
 
-BUFFER_TIME_HIGH = 1.0
+# Local API clients can briefly stall low-power printer hosts while a print is
+# being parsed.  Keep two seconds of motion queued so a sub-second stall cannot
+# turn a valid move into a late MCU command; pause requests may react up to one
+# second later as a result.
+BUFFER_TIME_HIGH = 2.0
 BUFFER_TIME_START = 0.250
 PRIMING_CMD_TIME = 0.100
 
