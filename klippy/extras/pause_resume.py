@@ -33,6 +33,10 @@ class PauseResume:
     def handle_connect(self):
         self.v_sd = self.printer.lookup_object('virtual_sdcard', None)
     def _handle_cancel_request(self, web_request):
+        if self.is_sd_active():
+            # Signal cancellation before waiting for the G-Code mutex so an
+            # active M109/M190/TEMPERATURE_WAIT can release that mutex.
+            self.v_sd.request_cancel()
         self.gcode.run_script("CANCEL_PRINT")
     def _handle_pause_request(self, web_request):
         self.gcode.run_script("PAUSE")
@@ -90,7 +94,9 @@ class PauseResume:
         self.is_paused = self.pause_command_sent = False
     cmd_CANCEL_PRINT_help = ("Cancel the current print")
     def cmd_CANCEL_PRINT(self, gcmd):
-        if self.is_sd_active() or self.sd_paused:
+        cancel_requested = (self.v_sd is not None
+                            and self.v_sd.is_cancel_requested())
+        if self.is_sd_active() or self.sd_paused or cancel_requested:
             self.v_sd.do_cancel()
         else:
             gcmd.respond_info("action:cancel")

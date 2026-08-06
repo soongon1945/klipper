@@ -29,6 +29,7 @@ class VirtualSD:
         self.next_file_position = 0
         self.work_timer = None
         self.allow_interrupt = False
+        self.cancel_requested = False
         # Error handling
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
         self.gcode = self.printer.lookup_object('gcode')
@@ -117,6 +118,14 @@ class VirtualSD:
             return 0.
     def is_active(self):
         return self.work_timer is not None
+    def is_cancel_requested(self):
+        return self.cancel_requested
+    def request_cancel(self):
+        if self.work_timer is not None:
+            # Web cancellation must be visible to long-running SD commands
+            # before CANCEL_PRINT can acquire the G-Code mutex.
+            self.cancel_requested = True
+            self.must_pause_work = True
     def do_pause(self):
         if self.work_timer is not None:
             self.must_pause_work = True
@@ -125,6 +134,7 @@ class VirtualSD:
     def do_resume(self):
         if self.work_timer is not None:
             raise self.gcode.error("SD busy")
+        self.cancel_requested = False
         self.must_pause_work = False
         self.work_timer = self.reactor.register_timer(
             self.work_handler, self.reactor.NOW)
@@ -134,6 +144,7 @@ class VirtualSD:
             self.current_file.close()
             self.current_file = None
             self.print_stats.note_cancel()
+        self.cancel_requested = False
         self.file_position = self.file_size = 0
         # self.gcode.run_script_from_command("CLEAR_LOCATION")
     # G-Code commands

@@ -351,8 +351,15 @@ class PrinterHeaters:
         toolhead = self.printer.lookup_object("toolhead")
         gcode = self.printer.lookup_object("gcode")
         reactor = self.printer.get_reactor()
+        v_sd = self.printer.lookup_object('virtual_sdcard', None)
+        if v_sd is not None and not v_sd.is_cmd_from_sd():
+            v_sd = None
         eventtime = reactor.monotonic()
         while not self.printer.is_shutdown() and heater.check_busy(eventtime):
+            # A web cancel cannot run CANCEL_PRINT while this wait owns the
+            # G-Code mutex, so release it after virtual SD records the request.
+            if v_sd is not None and v_sd.is_cancel_requested():
+                return
             print_time = toolhead.get_last_move_time()
             gcode.respond_raw(self._get_temp(eventtime))
             eventtime = reactor.pause(eventtime + 1.)
@@ -378,8 +385,15 @@ class PrinterHeaters:
             sensor = self.printer.lookup_object(sensor_name)
         toolhead = self.printer.lookup_object("toolhead")
         reactor = self.printer.get_reactor()
+        v_sd = self.printer.lookup_object('virtual_sdcard', None)
+        if v_sd is not None and not v_sd.is_cmd_from_sd():
+            v_sd = None
         eventtime = reactor.monotonic()
         while not self.printer.is_shutdown():
+            # Keep TEMPERATURE_WAIT cancellable for virtual SD prints without
+            # changing console or macro waits outside an active SD command.
+            if v_sd is not None and v_sd.is_cancel_requested():
+                return
             temp, target = sensor.get_temp(eventtime)
             if temp >= min_temp and temp <= max_temp:
                 return
