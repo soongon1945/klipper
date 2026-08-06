@@ -8,8 +8,12 @@ import chelper
 
 BGFLUSH_LOW_TIME = 0.200
 BGFLUSH_HIGH_TIME = 0.400
-BGFLUSH_SG_LOW_TIME = 0.450
-BGFLUSH_SG_HIGH_TIME = 0.700
+# The embedded K400 host has shown short scheduling gaps that allowed active
+# IDEX step batches to reach the MCU after their deadline.  Keep an additional
+# 300ms of generated motion queued; pause requests may take up to 300ms longer
+# to drain, but the MCU's Timer too close safety check remains unchanged.
+BGFLUSH_SG_LOW_TIME = 0.750
+BGFLUSH_SG_HIGH_TIME = 1.000
 BGFLUSH_EXTRA_TIME = 0.250
 
 MOVE_HISTORY_EXPIRE = 30.
