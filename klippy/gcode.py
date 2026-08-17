@@ -181,10 +181,9 @@ class GCodeDispatch:
             if cmd in commands:
                 commands[cmd]['help'] = self.gcode_help[cmd]
         self.status_commands = commands
-    # Accept checksum marker only when it is a standalone token (1~3 hex
-    # digits) and do not verify checksum for known text-oriented response
-    # commands.
-    checksum_line = re.compile(r'\s+\$([0-9A-Fa-f]{1,3})$')
+    # Accept checksum marker only when it is a standalone token (1~3 digits)
+    # and do not verify checksum for known text-oriented response commands.
+    checksum_line = re.compile(r'\s+\$([0-9]{1,3})$')
     checksum_text_commands = ('M117', 'M118')
     checksum_error = "Checksum mismatch for command '%s': expected 0x%02X got 0x%02X"
 
@@ -198,7 +197,7 @@ class GCodeDispatch:
         if not match:
             return line
         gcode_line = line[:match.start()].rstrip()
-        expected = int(match.group(1), 16) & 0xFF
+        expected = int(match.group(1), 10) & 0xFF
         calculated = 0
         for ch in gcode_line:
             calculated ^= ord(ch)
