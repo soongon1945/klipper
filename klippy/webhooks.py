@@ -455,7 +455,7 @@ class GCodeHelper:
         if gcode_move is None or not gcode_move.is_printer_ready:
             # GCodeHelper exists before config loading.  Keep RESTART and
             # other recovery commands available when motion setup has failed.
-            self.gcode.run_script(original_script)
+            self.gcode.run_script(original_script, require_checksum=True)
             return
         script_lines = original_script.split('\n')
         modified_script = []
@@ -579,10 +579,12 @@ class GCodeHelper:
             # 执行修改后的脚本
             final_script = ''.join(modified_script).strip()
             logging.info("Modified script:\n%s", final_script)
-            self.gcode.run_script(final_script)
+            # API-originated script path: checksum validation is required.
+            self.gcode.run_script(final_script, require_checksum=True)
         else:
             logging.info("Original script:\n%s", original_script)
-            self.gcode.run_script(original_script)
+            # API-originated script path: checksum validation is required.
+            self.gcode.run_script(original_script, require_checksum=True)
     def _handle_restart(self, web_request):
         self.gcode.run_script('restart')
     def _handle_firmware_restart(self, web_request):
