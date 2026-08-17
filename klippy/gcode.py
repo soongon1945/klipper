@@ -181,11 +181,17 @@ class GCodeDispatch:
             if cmd in commands:
                 commands[cmd]['help'] = self.gcode_help[cmd]
         self.status_commands = commands
-    checksum_line = re.compile(r'\s*\$([0-9A-Fa-f]{2})$')
+    # Accept checksum marker only when it is a standalone token and do not
+    # verify checksum for known text-oriented response commands.
+    checksum_line = re.compile(r'\s+\$([0-9A-Fa-f]{2})$')
+    checksum_text_commands = ('M117', 'M118')
     checksum_error = "Checksum mismatch for command '%s': expected 0x%02X got 0x%02X"
 
-    def _verify_and_strip_checksum(self, line, origline, require_checksum=False):
+    def _verify_and_strip_checksum(self, line, origline,
+                                  require_checksum=False, command=None):
         if not require_checksum:
+            return line
+        if command in self.checksum_text_commands:
             return line
         match = self.checksum_line.search(line)
         if not match:
@@ -262,8 +268,6 @@ class GCodeDispatch:
                     xyzmax_value = 0
             if cpos >= 0:
                 line = line[:cpos]
-            line = self._verify_and_strip_checksum(
-                line, origline, require_checksum=require_checksum)
             # Break line into parts and determine command
             parts = self.args_r.split(line.upper())
             if ''.join(parts[:2]) == 'N':
@@ -271,6 +275,8 @@ class GCodeDispatch:
                 cmd = ''.join(parts[3:5]).strip()
             else:
                 cmd = ''.join(parts[:3]).strip()
+            line = self._verify_and_strip_checksum(
+                line, origline, require_checksum=require_checksum, command=cmd)
             # Build gcode "params" dictionary
             params = { parts[i]: parts[i+1].strip()
                        for i in range(1, len(parts), 2) }
