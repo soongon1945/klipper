@@ -42,5 +42,15 @@ M204 S500
 SET_PRESSURE_ADVANCE EXTRUDER=extruder ADVANCE=.001
 SET_PRESSURE_ADVANCE ADVANCE=.002 SMOOTH_TIME=.001
 
+# Commands with printer-side checksum suffixes should still execute
+M107 $7
+M106 S255 $12
+M109 S0 $123
+M190 S0 $99
+M104 S0 $5
+M140 S0 $1
+G0 F4800 X10 Y10 $80
+G1 F3000 X12 Y12 Z0.2 E0.2 $5
+
 # Restart command (must be last in test)
 RESTART
