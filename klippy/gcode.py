@@ -204,7 +204,7 @@ class GCodeDispatch:
     _dollar_checksum_cmds = {
         'M107', 'M106', 'M109', 'M190', 'M104', 'M140', 'G0', 'G1',
     }
-    _dollar_checksum_r = re.compile(r'\s+\$\d+\s*$')
+    _dollar_checksum_r = re.compile(r'\s+\$\d{1,3}\s*$')
 
     def _strip_dollar_checksum(self, cmd, line):
         if cmd not in self._dollar_checksum_cmds:
