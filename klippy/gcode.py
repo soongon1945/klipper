@@ -181,31 +181,6 @@ class GCodeDispatch:
             if cmd in commands:
                 commands[cmd]['help'] = self.gcode_help[cmd]
         self.status_commands = commands
-    # Accept checksum marker only when it is a standalone token (1~3 digits)
-    # and do not verify checksum for known text-oriented response commands.
-    checksum_line = re.compile(r'\s+\$([0-9]{1,3})$')
-    checksum_text_commands = ('M117', 'M118')
-    checksum_error = "Checksum mismatch for command '%s': expected 0x%02X got 0x%02X"
-
-    def _verify_and_strip_checksum(self, line, origline,
-                                  require_checksum=False, command=None):
-        if not require_checksum:
-            return line
-        if command in self.checksum_text_commands:
-            return line
-        match = self.checksum_line.search(line)
-        if not match:
-            return line
-        gcode_line = line[:match.start()].rstrip()
-        expected = int(match.group(1), 10) & 0xFF
-        calculated = 0
-        for ch in gcode_line:
-            calculated ^= ord(ch)
-        if calculated != expected:
-            raise self.error(self.checksum_error
-                             % (origline, expected, calculated))
-        return gcode_line
-
     def register_output_handler(self, cb):
         self.output_callbacks.append(cb)
     def _handle_shutdown(self):
@@ -224,8 +199,7 @@ class GCodeDispatch:
         self._respond_state("Ready")
     # Parse input into commands
     args_r = re.compile('([A-Z_]+|[A-Z*])')
-    def _process_commands(self, commands, need_ack=True,
-                          require_checksum=False):
+    def _process_commands(self, commands, need_ack=True):
         for line in commands:
             # Ignore comments and leading/trailing spaces
             line = origline = line.strip()
@@ -275,8 +249,6 @@ class GCodeDispatch:
                 cmd = ''.join(parts[3:5]).strip()
             else:
                 cmd = ''.join(parts[:3]).strip()
-            line = self._verify_and_strip_checksum(
-                line, origline, require_checksum=require_checksum, command=cmd)
             # Build gcode "params" dictionary
             params = { parts[i]: parts[i+1].strip()
                        for i in range(1, len(parts), 2) }
@@ -298,18 +270,11 @@ class GCodeDispatch:
                 if not need_ack:
                     raise
             gcmd.ack()
-    def run_script_from_command(self, script, require_checksum=False):
-        self._process_commands(
-            script.split('\n'), need_ack=False,
-            require_checksum=require_checksum)
-
-    def run_script(self, script, require_checksum=False):
-        # Kept disabled by default for compatibility with legacy callers.
-        # Enable only for explicit protocol paths that should enforce $XX checksums.
+    def run_script_from_command(self, script):
+        self._process_commands(script.split('\n'), need_ack=False)
+    def run_script(self, script):
         with self.mutex:
-            self._process_commands(
-                script.split('\n'), need_ack=False,
-                require_checksum=require_checksum)
+            self._process_commands(script.split('\n'), need_ack=False)
     def get_mutex(self):
         return self.mutex
     def create_gcode_command(self, command, commandline, params):

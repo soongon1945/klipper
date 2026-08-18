@@ -6,8 +6,6 @@
 import os, sys, logging, io
 
 VALID_GCODE_EXTS = ['gcode', 'g', 'gco']
-CHECKSUM_RETRY_LIMIT = 5
-CHECKSUM_MISMATCH = "Checksum mismatch for command"
 
 DEFAULT_ERROR_GCODE = """
 {% if 'heaters' in printer %}
@@ -32,7 +30,6 @@ class VirtualSD:
         self.work_timer = None
         self.allow_interrupt = False
         self.cancel_requested = False
-        self._checksum_retry_count = {}
         # Error handling
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
         self.gcode = self.printer.lookup_object('gcode')
@@ -313,33 +310,10 @@ class VirtualSD:
             else:
                 next_file_position = self.file_position + len(line) + 1
             self.next_file_position = next_file_position
-            line_position = self.file_position
-            line_retry = self._checksum_retry_count.get(line_position, 0)
             try:
-                # SD card transport is checksum-aware in the new integrity flow.
-                # Retry on checksum mismatch only; after retries are exhausted we
-                # skip only that line and continue the print.
-                self.gcode.run_script(line, require_checksum=True)
+                self.gcode.run_script(line)
             except self.gcode.error as e:
                 error_message = str(e)
-                if CHECKSUM_MISMATCH in error_message:
-                    if line_retry < CHECKSUM_RETRY_LIMIT:
-                        self._checksum_retry_count[line_position] = line_retry + 1
-                        lines.append(line)
-                        self.reactor.pause(
-                            self.reactor.monotonic() + 0.050
-                        )
-                        continue
-                    error_message = None
-                    self._checksum_retry_count.pop(line_position, None)
-                    logging.warning(
-                        "Checksum mismatch on SD line at byte %d, skipped after %d retries",
-                        line_position, CHECKSUM_RETRY_LIMIT
-                    )
-                    self.cmd_from_sd = False
-                    self.file_position = self.next_file_position
-                    continue
-                self._checksum_retry_count.pop(line_position, None)
                 try:
                     self.gcode.run_script(self.on_error_gcode.render())
                 except:
@@ -349,7 +323,6 @@ class VirtualSD:
                 logging.exception("virtual_sdcard dispatch")
                 break
             self.cmd_from_sd = False
-            self._checksum_retry_count.pop(line_position, None)
             self.file_position = self.next_file_position
             # Do we need to skip around?
             if self.next_file_position != next_file_position:
