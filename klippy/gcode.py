@@ -199,6 +199,18 @@ class GCodeDispatch:
         self._respond_state("Ready")
     # Parse input into commands
     args_r = re.compile('([A-Z_]+|[A-Z*])')
+    # Some configs inject a "$" checksum-like suffix into a small set of commands.
+    # Strip it before argument tokenization so these commands remain parseable.
+    _dollar_checksum_cmds = {
+        'M107', 'M106', 'M109', 'M190', 'M104', 'M140', 'G0', 'G1',
+    }
+    _dollar_checksum_r = re.compile(r'\s+\$\d+\s*$')
+
+    def _strip_dollar_checksum(self, cmd, line):
+        if cmd not in self._dollar_checksum_cmds:
+            return line
+        return self._dollar_checksum_r.sub('', line, 1)
+
     def _process_commands(self, commands, need_ack=True):
         for line in commands:
             # Ignore comments and leading/trailing spaces
@@ -249,6 +261,10 @@ class GCodeDispatch:
                 cmd = ''.join(parts[3:5]).strip()
             else:
                 cmd = ''.join(parts[:3]).strip()
+            line = self._strip_dollar_checksum(cmd, line)
+            if line != origline:
+                origline = line
+                parts = self.args_r.split(line.upper())
             # Build gcode "params" dictionary
             params = { parts[i]: parts[i+1].strip()
                        for i in range(1, len(parts), 2) }
