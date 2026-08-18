@@ -251,10 +251,31 @@ class VirtualSD:
         logging.info("Starting SD card print (position %d)", self.file_position)
         self.reactor.unregister_timer(self.work_timer)
         if self.save_variables.was_interrupted and self.allow_interrupt:
-            self.file_position = self.save_variables.allVariables['byte']
-            self.current_file.seek(self.file_position)
+            # Consume the opt-in flags before touching the file: if they stayed
+            # set, a later M24 (pause/resume) would re-enter this block and
+            # rewind the print to the power-loss position.
             self.save_variables.was_interrupted = False
             self.allow_interrupt = False
+            resume_pos = self.save_variables.allVariables.get('byte', 0)
+            # A stale or out-of-range byte offset would seek into garbage or
+            # past EOF and the seek exception would kill the work timer,
+            # freezing the resumed print; fall back to a clean start instead.
+            # byte arrives as int via JSON, but tolerate float (e.g. from a
+            # hand-edited variables file) so a valid offset is not discarded.
+            if not isinstance(resume_pos, (int, float)) \
+                    or not 0 <= resume_pos < self.file_size:
+                logging.warning(
+                    "virtual_sdcard: ignoring invalid resume byte %r",
+                    resume_pos)
+                resume_pos = 0
+            resume_pos = int(resume_pos)
+            self.file_position = resume_pos
+            try:
+                self.current_file.seek(self.file_position)
+            except (OSError, ValueError):
+                logging.exception("virtual_sdcard resume seek")
+                self.file_position = 0
+                self.current_file.seek(0)
             for i in range(10):
                 try:
                     ack = True
