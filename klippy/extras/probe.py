@@ -275,6 +275,16 @@ class ZMaxEndstopHelper:
         if pos[2] >= self.position_max:
             raise self.printer.command_error(
                 "ZMAX_PROBE_CALIBRATE requires Z below position_max")
+        # An open or stuck upper-switch circuit reads permanently triggered,
+        # and the upward probe then aborts with the generic "Probe triggered
+        # prior to movement" error that points the operator at the bed probe
+        # instead of the Zmax wiring (2026-08-20 KlipperScreen log: zcalibrate
+        # failed ~16s after Start - right when the first upward probe began).
+        # Sample the pin first so the failure names the actual fault.
+        if self.mcu_endstop.query_endstop(toolhead.get_last_move_time()):
+            raise self.printer.command_error(
+                "Z max endstop reports triggered before the upward probe - "
+                "check the upper Z switch and its wiring")
         pos[2] = self.position_max
         # The upper switch is sampled only during this probing move.  Standard
         # probing_move checks pre-trigger and stops at the software Z maximum.
