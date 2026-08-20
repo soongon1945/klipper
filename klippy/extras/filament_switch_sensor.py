@@ -29,6 +29,9 @@ class RunoutHelper:
         # Internal state
         self.min_event_systime = self.reactor.NEVER
         self.filament_present = False
+        # Set on the first debounced sample from the MCU button task.  Until
+        # then filament_present is the False default, not a measurement.
+        self.sensor_reported = False
         self.sensor_enabled = True
         # Register commands and event handlers
         self.printer.register_event_handler("klippy:ready", self._handle_ready)
@@ -61,6 +64,7 @@ class RunoutHelper:
             logging.exception("Script running error")
         self.min_event_systime = self.reactor.monotonic() + self.event_delay
     def note_filament_present(self, eventtime, is_filament_present):
+        self.sensor_reported = True
         if is_filament_present == self.filament_present:
             return
         logging.info("is_filament_present: %d",is_filament_present)
@@ -92,8 +96,18 @@ class RunoutHelper:
                 (self.name, now))
             self.reactor.register_callback(self._runout_event_handler)
     def get_status(self, eventtime):
+        # Subscription snapshots taken between klippy:ready and the button
+        # task's first debounced sample would otherwise cache the False
+        # default as "no filament" in remote UIs, and because the pin does
+        # not change afterwards no correcting update is ever pushed.  On the
+        # K400 this paused the print with false "filament used up" dialogs
+        # eight times on 2026-08-20 while the klippy-side sensor never
+        # reported a change.  Report "present" until the first real sample
+        # arrives; UI-side runout debounce (>= 12s) far outlasts this
+        # startup window, so a genuinely empty spool is still caught.
+        detected = bool(self.filament_present) if self.sensor_reported else True
         return {
-            "filament_detected": bool(self.filament_present),
+            "filament_detected": detected,
             "enabled": bool(self.sensor_enabled)}
     cmd_QUERY_FILAMENT_SENSOR_help = "Query the status of the Filament Sensor"
     def cmd_QUERY_FILAMENT_SENSOR(self, gcmd):
