@@ -353,16 +353,28 @@ class ConfigAutoSave:
             # A previous SAVE_CONFIG already rewrote the config file and is
             # blocked in request_restart/wait_moves waiting for the host
             # restart.  A duplicate arriving in that window (e.g. a UI that
-            # double-sends the save script) used to re-enter this handler and
-            # die with GreenletExit while the first restart tore down the
-            # gcode greenlet, reporting a scary "Internal error on
-            # command:SAVE_CONFIG" shutdown (2026-08-20 klippy.log: duplicate
-            # offset-calibration script, backups printer-20260820_101037/
-            # 101039.cfg).  Ignoring it is safe: the file was already written
-            # and the restart is already in progress.
+            # double-sends the save script, or a second save button pressed
+            # before the restart reconnects the UI) used to re-enter
+            # request_restart and die with GreenletExit while the first
+            # restart tore down the gcode greenlet, reporting a scary
+            # "Internal error on command:SAVE_CONFIG" shutdown (2026-08-20
+            # klippy.log: duplicate offset-calibration script, backups
+            # printer-20260820_101037/101039.cfg).  Still write the file:
+            # options staged after the first save (fileconfig is never reset
+            # in this fork, so it holds every staging) would otherwise be
+            # lost.  Skip only the second restart request - the write is an
+            # atomic rename and the pending restart reloads the latest file.
+            self._write_config_file(gcmd)
             gcmd.respond_info(
-                "SAVE_CONFIG restart already pending, ignoring duplicate")
+                "SAVE_CONFIG restart already pending; staged changes written")
             return
+        self._write_config_file(gcmd)
+        # Request a restart
+        self.restart_pending = True
+        gcode = self.printer.lookup_object('gcode')
+        gcode.request_restart('restart')
+
+    def _write_config_file(self, gcmd):
         # Create string containing autosave data
         cfgrdr = ConfigFileReader()
         autosave_data = cfgrdr.build_config_string(self.fileconfig)
@@ -418,10 +430,6 @@ class ConfigAutoSave:
             msg = "Unable to write config file during SAVE_CONFIG"
             logging.exception(msg)
             raise gcmd.error(msg)
-        # Request a restart
-        self.restart_pending = True
-        gcode = self.printer.lookup_object('gcode')
-        gcode.request_restart('restart')
 
 
 ######################################################################
