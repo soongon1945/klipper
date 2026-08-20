@@ -242,6 +242,7 @@ class ConfigAutoSave:
         self.fileconfig = None
         self.status_save_pending = {}
         self.save_config_pending = False
+        self.restart_pending = False
         gcode = self.printer.lookup_object('gcode')
         gcode.register_command("SAVE_CONFIG", self.cmd_SAVE_CONFIG,
                                desc=self.cmd_SAVE_CONFIG_help)
@@ -348,6 +349,20 @@ class ConfigAutoSave:
     def cmd_SAVE_CONFIG(self, gcmd):
         if not self.fileconfig.sections():
             return
+        if self.restart_pending:
+            # A previous SAVE_CONFIG already rewrote the config file and is
+            # blocked in request_restart/wait_moves waiting for the host
+            # restart.  A duplicate arriving in that window (e.g. a UI that
+            # double-sends the save script) used to re-enter this handler and
+            # die with GreenletExit while the first restart tore down the
+            # gcode greenlet, reporting a scary "Internal error on
+            # command:SAVE_CONFIG" shutdown (2026-08-20 klippy.log: duplicate
+            # offset-calibration script, backups printer-20260820_101037/
+            # 101039.cfg).  Ignoring it is safe: the file was already written
+            # and the restart is already in progress.
+            gcmd.respond_info(
+                "SAVE_CONFIG restart already pending, ignoring duplicate")
+            return
         # Create string containing autosave data
         cfgrdr = ConfigFileReader()
         autosave_data = cfgrdr.build_config_string(self.fileconfig)
@@ -404,6 +419,7 @@ class ConfigAutoSave:
             logging.exception(msg)
             raise gcmd.error(msg)
         # Request a restart
+        self.restart_pending = True
         gcode = self.printer.lookup_object('gcode')
         gcode.request_restart('restart')
 
