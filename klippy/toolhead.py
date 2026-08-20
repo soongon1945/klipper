@@ -197,7 +197,16 @@ class LookAheadQueue:
 # turn a valid move into a late MCU command; pause requests may react up to one
 # second later as a result.
 BUFFER_TIME_HIGH = 2.0
-BUFFER_TIME_START = 0.250
+# Restart-from-idle moves (e.g. the park move of a tool-change macro after a
+# paused print drained the motion queue) schedule their first step only this
+# far ahead, and the gcode handler keeps executing without yielding to the
+# reactor, so every trailing macro command delays step dispatch against this
+# budget.  The 2026-08-20 K400 "Timer too close" shutdown lost the 0.250s
+# default to ~0.35s of trailing tool-switch commands (a back-to-back T0 pass,
+# RECORD_GCODE_STATE, SET_PRIMARY_MODE) plus a ~23ms 250k-baud backlog.
+# 0.500s keeps ~3x that worst case; the first move after an idle period
+# starts up to 0.25s later, which is imperceptible during tool changes.
+BUFFER_TIME_START = 0.500
 PRIMING_CMD_TIME = 0.100
 
 def _accel_to_min_cruise_ratio(max_accel, accel_to_decel):
