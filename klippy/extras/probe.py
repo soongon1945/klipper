@@ -250,6 +250,7 @@ class ZMaxEndstopHelper:
         self.default_lift_speed = param_helper.lift_speed
         self.default_retract_dist = param_helper.sample_retract_dist
         self.gcode = self.printer.lookup_object('gcode')
+        self.pending_position = None
         zmax_pin = config.get('zmax_pin', None)
         if zmax_pin is None:
             return
@@ -258,13 +259,17 @@ class ZMaxEndstopHelper:
         config.getfloat('z_max_position', None)
         self.position_min = lookup_minimum_z(config)
         self.position_max = lookup_maximum_z(config)
-        self.pending_position = None
         ppins = self.printer.lookup_object('pins')
         self.mcu_endstop = ppins.setup_pin('endstop', zmax_pin)
         LookupZSteppers(config, self.mcu_endstop.add_stepper)
         self.gcode.register_command(
             'ZMAX_PROBE_CALIBRATE', self.cmd_ZMAX_PROBE_CALIBRATE,
             desc=self.cmd_ZMAX_PROBE_CALIBRATE_help)
+    def get_status(self, eventtime):
+        return {
+            'zmax_calibration_pending': self.pending_position is not None,
+            'zmax_pending_position': self.pending_position,
+        }
     def _probe_zmax(self, speed):
         toolhead = self.printer.lookup_object('toolhead')
         eventtime = self.printer.get_reactor().monotonic()
@@ -776,7 +781,11 @@ class PrinterProbe:
     def get_offsets(self, gcmd=None):
         return self.probe_offsets.get_offsets(gcmd)
     def get_status(self, eventtime):
-        return self.cmd_helper.get_status(eventtime)
+        status = self.cmd_helper.get_status(eventtime)
+        # Expose confirmation state so a reconnecting UI can still offer the
+        # ACCEPT/ABORT actions registered by ZMAX_PROBE_CALIBRATE SAVE=1.
+        status.update(self.zmax_helper.get_status(eventtime))
+        return status
     def start_probe_session(self, gcmd):
         return self.probe_session.start_probe_session(gcmd)
 
