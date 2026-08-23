@@ -126,10 +126,6 @@ class ManualProbe:
         configfile = self.printer.lookup_object('configfile')
         configfile.set(self.z_endstop_config_name, 'position_endstop',
                        "%.3f" % (z_pos,))
-        # SAVE_CONFIG may be deferred while the user repeats calibration.
-        # Keep the in-memory baseline aligned with the staged value so a
-        # second ACCEPT does not apply its adjustment to the startup value.
-        self.z_position_endstop = z_pos
     cmd_Z_ENDSTOP_CALIBRATE_help = "Calibrate a Z endstop"
     def cmd_Z_ENDSTOP_CALIBRATE(self, gcmd):
         ManualProbeHelper(self.printer, gcmd, self.z_endstop_finalize)
