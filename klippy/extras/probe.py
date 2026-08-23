@@ -110,6 +110,11 @@ class ProbeCommandHelper:
             "with the above and restart the printer." % (self.name, z_offset))
         configfile = self.printer.lookup_object('configfile')
         configfile.set(self.name, 'z_offset', "%.3f" % (z_offset,))
+        # SAVE_CONFIG may be deferred while calibration is repeated. Keep
+        # probe results and probe:z_virtual_endstop on the staged reference
+        # instead of continuing to use the value loaded at startup.
+        self.probe.z_offset = z_offset
+        self.probe.mcu_probe.position_endstop = z_offset
     cmd_PROBE_CALIBRATE_help = "Calibrate the probe's z_offset"
     def cmd_PROBE_CALIBRATE(self, gcmd):
         manual_probe.verify_no_manual_probe(self.printer)
@@ -190,6 +195,8 @@ class ProbeCommandHelper:
             % (self.name, new_calibrate))
         configfile = self.printer.lookup_object('configfile')
         configfile.set(self.name, 'z_offset', "%.3f" % (new_calibrate,))
+        self.probe.z_offset = new_calibrate
+        self.probe.mcu_probe.position_endstop = new_calibrate
     cmd_E_OFFSET_APPLY_PROBE_help = "Save secondary nozzle probe offsets"
     def cmd_E_OFFSET_APPLY_PROBE(self, gcmd):
         gcode_move = self.printer.lookup_object('gcode_move')
@@ -211,6 +218,8 @@ class ProbeCommandHelper:
         # SET_GCODE_OFFSET Z belongs in the probe's calibrated trigger
         # distance on virtual-endstop machines, not a missing endstop.
         configfile.set(self.name, 'z_offset', "%.3f" % (new_calibrate,))
+        self.probe.z_offset = new_calibrate
+        self.probe.mcu_probe.position_endstop = new_calibrate
 
 # Helper to lookup the minimum Z position for the printer
 def lookup_minimum_z(config):
