@@ -75,10 +75,17 @@ class ProbeCommandHelper:
     def _move(self, coord, speed):
         self.printer.lookup_object('toolhead').manual_move(coord, speed)
     def get_status(self, eventtime):
+        calibrate_bed_z = None
+        if self.probe_calibrate_info is not None:
+            calibrate_bed_z = self.probe_calibrate_info[0].bed_z
         return {'name': self.name,
                 'last_query': self.last_state,
                 'last_probe_position': self.last_probe_position,
-                'last_z_result': self.last_z_result}
+                'last_z_result': self.last_z_result,
+                # KlipperScreen needs the same automatic probe result used by
+                # probe_calibrate_finalize; deriving it from manual Z alone
+                # hid invalid signs and displayed a value ACCEPT would not save.
+                'probe_calibrate_bed_z': calibrate_bed_z}
     cmd_QUERY_PROBE_help = "Return the status of the z-probe"
     def cmd_QUERY_PROBE(self, gcmd):
         if self.query_endstop is None:
@@ -99,9 +106,11 @@ class ProbeCommandHelper:
         x_offset, y_offset, z_offset = self.probe.get_offsets(gcmd)
         self.last_z_result = pos.bed_z + z_offset # Deprecated
     def probe_calibrate_finalize(self, mpresult):
+        calibrate_info = self.probe_calibrate_info
+        self.probe_calibrate_info = None
         if mpresult is None:
             return
-        ppos, offsets = self.probe_calibrate_info
+        ppos, offsets = calibrate_info
         z_offset = offsets[2] - mpresult.bed_z + ppos.bed_z
         gcode = self.printer.lookup_object('gcode')
         gcode.respond_info(
