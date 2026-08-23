@@ -298,12 +298,16 @@ class ManualProbeHelper:
     def cmd_ACCEPT(self, gcmd):
         pos = self.toolhead.get_position()
         start_pos = self.start_position
-        # if pos[:2] != start_pos[:2] or pos[2] >= start_pos[2]:
-        #     gcmd.respond_info(
-        #         "Manual probe failed! Use TESTZ commands to position the\n"
-        #         "nozzle prior to running ACCEPT.")
-        #     self.finalize(False)
-        #     return
+        # ACCEPT at the initial lift height can turn horizontal_move_z into a
+        # bogus probe z_offset (K400 produced -4.995 and an ~8mm mesh shift).
+        # Require a real downward TESTZ move and reject any external XY move so
+        # calibration compares the nozzle at the original probed bed location.
+        if pos[:2] != start_pos[:2] or pos[2] >= start_pos[2]:
+            gcmd.respond_info(
+                "Manual probe failed! Use TESTZ commands to position the\n"
+                "nozzle prior to running ACCEPT.")
+            self.finalize(False)
+            return
         self.finalize(True)
     cmd_ABORT_help = "Abort manual Z probing tool"
     def cmd_ABORT(self, gcmd):
