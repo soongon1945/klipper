@@ -16,6 +16,16 @@ BGFLUSH_SG_LOW_TIME = 0.750
 BGFLUSH_SG_HIGH_TIME = 1.000
 BGFLUSH_EXTRA_TIME = 0.250
 
+# Thresholds for the FlushTiming log line.  Past "Timer too close" shutdowns
+# on the embedded K400 host showed a 0.6-0.8s gap in step-command sends while
+# load, MCU task time and buffer stats all stayed healthy, so record the
+# flush-timer wake lateness, the step-generation batch duration and the
+# wall-clock gap between batches to identify which interval stalls.  Normal
+# stepping wakes once per 0.250s batch, hence the 0.500s gap threshold.
+FLUSH_WAKE_LATE_LOG = 0.100
+FLUSH_ADVANCE_LOG = 0.050
+FLUSH_SG_GAP_LOG = 0.500
+
 MOVE_HISTORY_EXPIRE = 30.
 MIN_KIN_TIME = 0.100
 STEPCOMPRESS_FLUSH_TIME = 0.050
@@ -59,6 +69,9 @@ class PrinterMotionQueuing:
         self.do_kick_flush_timer = True
         self.last_flush_time = self.last_step_gen_time = 0.
         self.need_flush_time = self.need_step_gen_time = 0.
+        # Flush-timer latency tracking (see FLUSH_WAKE_LATE_LOG)
+        self.expect_wake_time = 0.
+        self.last_advance_monotime = 0.
         # "Drip" timing (for homing and probing moves)
         self.drip_start_times = []
         # Register handlers
@@ -173,6 +186,7 @@ class PrinterMotionQueuing:
             raise self.mcu.error(msg)
         self.last_flush_time = flush_time
         self.last_step_gen_time = step_gen_time
+        self.last_advance_monotime = self.reactor.monotonic()
         # Move processed trapq entries to history list, and expire old history
         for trapq in self.trapqs:
             self.trapq_finalize_moves(trapq, trapq_free_time,
@@ -197,6 +211,14 @@ class PrinterMotionQueuing:
     def _flush_handler(self, eventtime):
         try:
             est_print_time = self.mcu.estimated_print_time(eventtime)
+            monotime = self.reactor.monotonic()
+            wake_late = 0.
+            if self.expect_wake_time:
+                wake_late = max(0., eventtime - self.expect_wake_time)
+            sg_gap = 0.
+            if self.last_advance_monotime:
+                sg_gap = monotime - self.last_advance_monotime
+            t0 = monotime
             aggr_sg_time = self.need_step_gen_time - 2.*self.kin_flush_delay
             if self.last_step_gen_time < aggr_sg_time:
                 # Actively stepping - want more aggressive flushing
@@ -221,6 +243,15 @@ class PrinterMotionQueuing:
                 # Flush motion queues (if needed)
                 if want_flush_time > self.last_flush_time:
                     self._advance_flush_time(want_flush_time)
+            advance_time = self.reactor.monotonic() - t0
+            if (wake_late > FLUSH_WAKE_LATE_LOG
+                    or advance_time > FLUSH_ADVANCE_LOG
+                    or sg_gap > FLUSH_SG_GAP_LOG):
+                logging.warning(
+                    "FlushTiming: wake_late=%.3f sg_gap=%.3f advance=%.3f"
+                    " est_print_time=%.3f last_step_gen=%.3f need_sg=%.3f",
+                    wake_late, sg_gap, advance_time, est_print_time,
+                    self.last_step_gen_time, self.need_step_gen_time)
             # Reschedule timer
             aggr_sg_time = self.need_step_gen_time - 2.*self.kin_flush_delay
             if self.last_step_gen_time < aggr_sg_time:
@@ -229,9 +260,12 @@ class PrinterMotionQueuing:
                 self.do_kick_flush_timer = True
                 max_flush_time = self.need_flush_time + BGFLUSH_EXTRA_TIME
                 if self.last_flush_time >= max_flush_time:
+                    self.expect_wake_time = 0.
                     return self.reactor.NEVER
                 waketime = self.last_flush_time - BGFLUSH_LOW_TIME
-            return eventtime + waketime - est_print_time
+            delay = eventtime + waketime - est_print_time
+            self.expect_wake_time = self.reactor.monotonic() + delay
+            return delay
         except:
             logging.exception("Exception in flush_handler")
             self.printer.invoke_shutdown("Exception in flush_handler")
@@ -264,6 +298,10 @@ class PrinterMotionQueuing:
         self.need_flush_time = max(self.need_flush_time, mq_time)
         if self.do_kick_flush_timer:
             self.do_kick_flush_timer = False
+            self.expect_wake_time = 0.
+            # Restart the gap measurement so an idle period is not reported
+            # as a step-generation stall on the first wake after the kick.
+            self.last_advance_monotime = 0.
             self.reactor.update_timer(self.flush_timer, self.reactor.NOW)
     # "Drip" timing (for homing and probing moves)
     def drip_update_time(self, start_time, end_time, drip_completion):
@@ -272,6 +310,7 @@ class PrinterMotionQueuing:
         # Disable background flushing from timer
         self.reactor.update_timer(self.flush_timer, self.reactor.NEVER)
         self.do_kick_flush_timer = False
+        self.expect_wake_time = 0.
         self._advance_flush_time(start_time - SDS_CHECK_TIME, start_time)
         # Flush in segments until drip_completion signal
         flush_time = start_time
