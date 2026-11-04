@@ -220,7 +220,8 @@ class PrinterMotionQueuing:
                 sg_gap = monotime - self.last_advance_monotime
             t0 = monotime
             aggr_sg_time = self.need_step_gen_time - 2.*self.kin_flush_delay
-            if self.last_step_gen_time < aggr_sg_time:
+            is_stepgen = self.last_step_gen_time < aggr_sg_time
+            if is_stepgen:
                 # Actively stepping - want more aggressive flushing
                 want_sg_time = est_print_time + BGFLUSH_SG_HIGH_TIME
                 batch_time = BGFLUSH_SG_HIGH_TIME - BGFLUSH_SG_LOW_TIME
@@ -247,11 +248,20 @@ class PrinterMotionQueuing:
             if (wake_late > FLUSH_WAKE_LATE_LOG
                     or advance_time > FLUSH_ADVANCE_LOG
                     or sg_gap > FLUSH_SG_GAP_LOG):
+                # The first captured incidents showed wake_late=0 and
+                # advance<0.002, so report the queue-side limits too: the
+                # generation horizon is capped at need_sg - 2*kfd, and only
+                # kfd/need_flush can say whether that cap or an empty move
+                # queue is what starved step generation.
                 logging.warning(
-                    "FlushTiming: wake_late=%.3f sg_gap=%.3f advance=%.3f"
-                    " est_print_time=%.3f last_step_gen=%.3f need_sg=%.3f",
-                    wake_late, sg_gap, advance_time, est_print_time,
-                    self.last_step_gen_time, self.need_step_gen_time)
+                    "FlushTiming: br=%s wake_late=%.3f sg_gap=%.3f"
+                    " advance=%.3f kfd=%.3f est_print_time=%.3f"
+                    " last_step_gen=%.3f need_sg=%.3f aggr_sg=%.3f"
+                    " last_flush=%.3f need_flush=%.3f",
+                    ("sg" if is_stepgen else "idle"), wake_late, sg_gap,
+                    advance_time, self.kin_flush_delay, est_print_time,
+                    self.last_step_gen_time, self.need_step_gen_time,
+                    aggr_sg_time, self.last_flush_time, self.need_flush_time)
             # Reschedule timer
             aggr_sg_time = self.need_step_gen_time - 2.*self.kin_flush_delay
             if self.last_step_gen_time < aggr_sg_time:
