@@ -8,12 +8,13 @@ import chelper
 
 BGFLUSH_LOW_TIME = 0.200
 BGFLUSH_HIGH_TIME = 0.400
-# The embedded K400 host has shown short scheduling gaps that allowed active
-# IDEX step batches to reach the MCU after their deadline.  Keep an additional
-# 300ms of generated motion queued; pause requests may take up to 300ms longer
-# to drain, but the MCU's Timer too close safety check remains unchanged.
-BGFLUSH_SG_LOW_TIME = 0.750
-BGFLUSH_SG_HIGH_TIME = 1.000
+# K400 field logs show step-generation gaps up to 1.098s followed by roughly
+# 0.152s of serial backlog at 250k baud.  Keep 1.5s of generated motion at the
+# low watermark so those host gaps do not turn queued steps into late MCU
+# commands.  Pause/cancel may take up to 0.75s longer than the prior setting;
+# the MCU's Timer too close safety check remains unchanged.
+BGFLUSH_SG_LOW_TIME = 1.500
+BGFLUSH_SG_HIGH_TIME = 1.750
 BGFLUSH_EXTRA_TIME = 0.250
 
 # Thresholds for the FlushTiming log line.  Past "Timer too close" shutdowns
@@ -50,6 +51,10 @@ def _calc_step_gen_target(last_step_gen_time, est_print_time, aggr_sg_time):
         # Delay flushing until next wakeup
         next_batch_time = last_step_gen_time
     return min(next_batch_time, aggr_sg_time)
+
+
+def _calc_monotonic_waketime(eventtime, print_waketime, est_print_time):
+    return eventtime + print_waketime - est_print_time
 
 
 class PrinterMotionQueuing:
@@ -283,9 +288,12 @@ class PrinterMotionQueuing:
                     self.expect_wake_time = 0.
                     return self.reactor.NEVER
                 waketime = self.last_flush_time - BGFLUSH_LOW_TIME
-            delay = eventtime + waketime - est_print_time
-            self.expect_wake_time = self.reactor.monotonic() + delay
-            return delay
+            next_waketime = _calc_monotonic_waketime(
+                eventtime, waketime, est_print_time)
+            # Keep the expected time in the same absolute monotonic clock as
+            # eventtime; adding it to monotonic again masks late timer wakes.
+            self.expect_wake_time = next_waketime
+            return next_waketime
         except:
             logging.exception("Exception in flush_handler")
             self.printer.invoke_shutdown("Exception in flush_handler")
