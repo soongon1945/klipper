@@ -34,6 +34,24 @@ SDS_CHECK_TIME = 0.001 # step+dir+step filter in stepcompress.c
 DRIP_SEGMENT_TIME = 0.050
 DRIP_TIME = 0.100
 
+
+def _calc_step_gen_target(last_step_gen_time, est_print_time, aggr_sg_time):
+    want_sg_time = est_print_time + BGFLUSH_SG_HIGH_TIME
+    batch_time = BGFLUSH_SG_HIGH_TIME - BGFLUSH_SG_LOW_TIME
+    next_batch_time = last_step_gen_time + batch_time
+    # A short host gap can leave one normal batch below the configured low
+    # watermark.  Catch up to the high watermark in the same handler so late
+    # step commands cannot shut down the MCU; the actual motion horizon still
+    # caps the target.  This only restores the configured high watermark, so
+    # pause/cancel never exceeds its normal maximum drain window.
+    if next_batch_time <= est_print_time + BGFLUSH_SG_LOW_TIME:
+        next_batch_time = want_sg_time
+    elif next_batch_time > want_sg_time + 0.005:
+        # Delay flushing until next wakeup
+        next_batch_time = last_step_gen_time
+    return min(next_batch_time, aggr_sg_time)
+
+
 class PrinterMotionQueuing:
     def __init__(self, config):
         self.printer = printer = config.get_printer()
@@ -223,16 +241,8 @@ class PrinterMotionQueuing:
             is_stepgen = self.last_step_gen_time < aggr_sg_time
             if is_stepgen:
                 # Actively stepping - want more aggressive flushing
-                want_sg_time = est_print_time + BGFLUSH_SG_HIGH_TIME
-                batch_time = BGFLUSH_SG_HIGH_TIME - BGFLUSH_SG_LOW_TIME
-                next_batch_time = self.last_step_gen_time + batch_time
-                if next_batch_time > est_print_time:
-                    # Improve run-to-run reproducibility by batching from last
-                    if next_batch_time > want_sg_time + 0.005:
-                        # Delay flushing until next wakeup
-                        next_batch_time = self.last_step_gen_time
-                    want_sg_time = next_batch_time
-                want_sg_time = min(want_sg_time, aggr_sg_time)
+                want_sg_time = _calc_step_gen_target(
+                    self.last_step_gen_time, est_print_time, aggr_sg_time)
                 # Flush motion queues (if needed)
                 if want_sg_time > self.last_step_gen_time:
                     self._advance_flush_time(0., want_sg_time)
