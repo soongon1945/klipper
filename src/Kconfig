@@ -46,6 +46,13 @@ source "src/ar100/Kconfig"
 source "src/linux/Kconfig"
 source "src/simulator/Kconfig"
 
+# Dense multi-axis jobs can consume more than 1024 shared move nodes. Keep
+# smaller MCUs at the existing memory cost while using the F429's larger RAM.
+config MCU_MOVE_QUEUE_SIZE
+    int
+    default 2048 if MACH_STM32F429
+    default 1024
+
 # Generic configuration options for serial ports
 config SERIAL
     bool

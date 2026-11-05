@@ -5,6 +5,7 @@
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
 #include <string.h> // memset
+#include "autoconf.h" // CONFIG_MCU_MOVE_QUEUE_SIZE
 #include "basecmd.h" // oid_lookup
 #include "board/irq.h" // irq_save
 #include "board/misc.h" // alloc_maxsize
@@ -173,7 +174,10 @@ move_finalize(void)
         shutdown("Already finalized");
     struct move_queue_head dummy;
     move_queue_setup(&dummy, sizeof(*move_free_list));
-    move_list = alloc_chunks(move_item_size, 1024, &move_count);
+    // The configured cap lets high-memory MCUs absorb dense multi-axis jobs
+    // without weakening the timer safety checks used to detect late moves.
+    move_list = alloc_chunks(move_item_size, CONFIG_MCU_MOVE_QUEUE_SIZE,
+                             &move_count);
     move_reset();
 }
 
